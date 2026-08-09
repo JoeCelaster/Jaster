@@ -1,0 +1,58 @@
+name: Release
+
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+      
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            artifact: jaster-linux-x86_64
+            binary: jaster
+
+          - os: windows-latest
+            artifact: jaster-windows-x86_64.exe
+            binary: jaster.exe
+
+          - os: macos-13
+            artifact: jaster-macos-intel
+            binary: jaster
+
+          - os: macos-14
+            artifact: jaster-macos-apple
+            binary: jaster
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Build
+        run: cargo build --release
+
+      - name: Rename binary (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: |
+          cp target/release/${{ matrix.binary }} ${{ matrix.artifact }}
+
+      - name: Rename binary (Windows)
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          Copy-Item target\release\${{ matrix.binary }} ${{ matrix.artifact }}
+
+      - name: Upload Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ matrix.artifact }}
