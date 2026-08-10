@@ -55,8 +55,9 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                         for event in events {
                             if let EventSummary::Key(_, key, value) = event.destructure() {
                                 #[cfg(debug_assertions)]
-                                println!("[{}] {:?} {}", device_name, key, value);  
-
+                                if value == 1 {
+                                    println!("⌨️  {}: {:?}", device_name, key);
+                                }
                                 if value == 1 {
                                     if let Some(sound) = cache.sounds.get(&key) {
                                         AudioPlayer::play(engine.mixer(), sound.clone());

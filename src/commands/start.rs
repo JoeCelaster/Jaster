@@ -12,8 +12,8 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     command
         .arg("daemon")
         .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null());
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit());
 
     #[cfg(unix)]
     unsafe {
