@@ -1,8 +1,10 @@
+<img width="300" height="150" alt="Add a heading" src="https://github.com/user-attachments/assets/9ffaeb17-51a0-451b-a491-e9efd7126703" />
+
 # Jaster
 
 **Bring mechanical typing sounds to your native keyboard.**
 
-Jaster listens to your keyboard input and plays realistic typing sounds with minimal setup. Once installed, it runs directly from your terminal.
+Jaster is a lightweight CLI application that adds realistic mechanical typing sounds to any keyboard on Linux, providing an immersive typing experience with minimal setup.
 
 ---
 
