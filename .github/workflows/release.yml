@@ -33,11 +33,19 @@ jobs:
       - name: Build
         run: cargo build --release
 
-      - name: Rename binary
+      - name: Make installer executable
+        run: chmod +x scripts/install.sh
+
+      - name: Package Release
         run: |
-          cp target/release/jaster jaster-linux-x86_64
+          mkdir jaster
+          cp target/release/jaster jaster/jaster
+          cp scripts/install.sh jaster/install.sh
+          cp -r assets jaster/
+
+          tar -czf jaster-linux-x86_64.tar.gz jaster
 
       - name: Upload Release
         uses: softprops/action-gh-release@v2
         with:
-          files: jaster-linux-x86_64
+          files: jaster-linux-x86_64.tar.gz

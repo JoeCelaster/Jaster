@@ -1,15 +1,14 @@
 #!/usr/bin/env bash
-
 set -e
 
-echo "Installing Jaster..."
+TMP_DIR=$(mktemp -d)
 
-sudo mkdir -p /usr/local/bin
-sudo mkdir -p /usr/share/jaster
+echo "📦 Downloading Jaster..."
 
-sudo cp jaster-linux-x86_64 /usr/local/bin/jaster
-sudo chmod +x /usr/local/bin/jaster
+curl -L \
+https://github.com/JoeCelaster/Jaster/releases/latest/download/jaster-linux-x86_64.tar.gz \
+-o "$TMP_DIR/jaster.tar.gz"
 
-sudo cp -r assets/sounds /usr/share/jaster/
+tar -xzf "$TMP_DIR/jaster.tar.gz" -C "$TMP_DIR"
 
-echo "✓ Installed!"
+bash "$TMP_DIR/jaster/install.sh"
