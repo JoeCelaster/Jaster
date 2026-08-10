@@ -17,4 +17,6 @@ pub enum Commands {
 
     #[command(hide = true)]
     Daemon,
+
+    Event,
 }

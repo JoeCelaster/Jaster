@@ -11,6 +11,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Commands::Daemon => commands::daemon::run()?,
         Commands::Doctor => commands::doctor::run()?,
         Commands::Stop => commands::stop::run()?,
+        Commands::Event => commands::event::run()?,
     }
 
     Ok(())
