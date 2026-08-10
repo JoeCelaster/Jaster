@@ -6,9 +6,11 @@ TMP_DIR=$(mktemp -d)
 echo "📦 Downloading Jaster..."
 
 curl -L \
-https://github.com/JoeCelaster/Jaster/releases/latest/download/jaster-linux-x86_64.tar.gz \
--o "$TMP_DIR/jaster.tar.gz"
+  https://github.com/JoeCelaster/Jaster/releases/latest/download/jaster-linux-x86_64.tar.gz \
+  -o "$TMP_DIR/jaster.tar.gz"
 
 tar -xzf "$TMP_DIR/jaster.tar.gz" -C "$TMP_DIR"
 
-bash "$TMP_DIR/jaster/install.sh"
+cd "$TMP_DIR/jaster"
+
+bash install.sh
