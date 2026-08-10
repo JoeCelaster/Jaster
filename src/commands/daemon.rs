@@ -7,44 +7,86 @@ use crate::{
     keyboard::discovery::find_keyboards,
 };
 
-use evdev::{Device, EventSummary};
-use std::fs::File;
+use evdev::EventSummary;
+use std::{
+    sync::Arc,
+    thread,
+};
 
 pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     println!("🎹 Jaster daemon started.");
 
-    let engine = AudioEngine::new()?;
-    let cache = SoundCache::new()?;
+    let engine = Arc::new(AudioEngine::new()?);
+    println!("✓ Audio engine initialized");
 
+    let cache = Arc::new(SoundCache::new()?);
+    println!("✓ Sound cache loaded");
+
+    println!("🔍 Discovering keyboards...");
     let keyboards = find_keyboards()?;
 
     if keyboards.is_empty() {
-        println!("❌ No keyboards detected.");
+        println!("❌ No keyboards found.");
         return Ok(());
     }
 
-    println!("Found {} keyboard(s).", keyboards.len());
+    println!("✓ Found {} keyboard(s)", keyboards.len());
 
-    let path = &keyboards[0];
+    let mut handles = Vec::new();
 
-    println!("Using {}", path.display());
+    for mut keyboard in keyboards {
+        let device_name = keyboard
+            .device
+            .name()
+            .unwrap_or("Unknown Keyboard")
+            .to_string();
 
-    let file = File::open(path)?;
-    let mut device = Device::try_from(file)?;
+        println!("• {} ({})", device_name, keyboard.path.display());
 
-    println!("Listening for keyboard events...");
+        let engine = Arc::clone(&engine);
+        let cache = Arc::clone(&cache);
 
-    loop {
-        for event in device.fetch_events()? {
-            if let EventSummary::Key(_, key, value) = event.destructure() {
-                if value == 1 {
-                    if let Some(sound) = cache.sounds.get(&key) {
-                        AudioPlayer::play(engine.mixer(), sound.clone());
-                    } else {
-                        AudioPlayer::play(engine.mixer(), cache.generic.clone());
+        let handle = thread::spawn(move || {
+            println!("🎧 Listening on {}", device_name);
+
+            loop {
+                match keyboard.device.fetch_events() {
+                    Ok(events) => {
+                        for event in events {
+                            if let EventSummary::Key(_, key, value) = event.destructure() {
+                                #[cfg(debug_assertions)]
+                                println!("[{}] {:?} {}", device_name, key, value);  
+
+                                if value == 1 {
+                                    if let Some(sound) = cache.sounds.get(&key) {
+                                        AudioPlayer::play(engine.mixer(), sound.clone());
+                                    } else {
+                                        AudioPlayer::play(engine.mixer(), cache.generic.clone());
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    Err(err) => {
+                        eprintln!(
+                            "❌ Error reading {}: {}",
+                            keyboard.path.display(),
+                            err
+                        );
+                        break;
                     }
                 }
             }
-        }
+        });
+
+        handles.push(handle);
     }
+
+    println!("🚀 Jaster is running.");
+
+    for handle in handles {
+        handle.join().unwrap();
+    }
+
+    Ok(())
 }

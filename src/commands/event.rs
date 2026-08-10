@@ -5,15 +5,13 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
 
     let keyboards = find_keyboards()?;
 
-    if keyboards.is_empty() {
-        println!("❌ No keyboards found.");
-    } else {
-        println!("Found {} keyboard(s).", keyboards.len());
-
-        for path in keyboards {
-            println!("{}", path.display());
-        }
-    }
+for keyboard in keyboards {
+    println!(
+        "✓ {} - {}",
+        keyboard.path.display(),
+        keyboard.device.name().unwrap_or("Unknown Keyboard")
+    );
+}
 
     Ok(())
 }
