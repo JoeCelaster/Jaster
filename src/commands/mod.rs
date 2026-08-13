@@ -3,3 +3,4 @@ pub mod stop;
 pub mod doctor;
 pub mod daemon;
 pub mod event;
+pub mod update;
