@@ -3,12 +3,13 @@ use std::{
     fs::{self, File},
     process::Command,
 };
+use colored::*;
 
 pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     println!("🩺 Jaster Doctor\n");
 
     // ---------------------------
-    // OS
+    // Operating System
     // ---------------------------
     println!("Operating System");
 
@@ -93,9 +94,10 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     if permission_error {
         println!();
         println!("❌ Permission denied.");
+        println!();
         println!("Run:");
         println!("    sudo usermod -aG input $USER");
-        println!("Then log out and log back in.");
+        println!("    exec su - \"$USER\"");
     }
 
     if !found && !permission_error {
@@ -105,15 +107,80 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     println!();
 
     // ---------------------------
-    // Result
+    // Summary
     // ---------------------------
+    println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+
     if found && !permission_error && audio.success() {
-        println!("🎉 Everything looks good!");
-        println!("Run:");
-        println!("    jaster start");
+        println!("{}", "                      Jaster is Ready!".bold().cyan());
+        println!();
+
+        println!("{}", "Get Started".yellow());
+        println!();
+
+
+        println!("    {}   {}", "jaster start".green(),
+            "start the mechanical key sound".bright_black());
+        println!();
+
+
+        println!("{}", "Available Commands".yellow());
+        println!();
+
+
+        println!(
+            "    {}    {}",
+            "jaster doctor".green(),
+            "Check installation".bright_black()
+        );
+
+        println!(
+            "    {}     {}",
+            "jaster event".green(),
+            "List detected keyboards".bright_black()
+        );
+
+        println!(
+            "    {}      {}",
+            "jaster stop".green(),
+            "Stop the Jaster daemon".bright_black()
+        );
+
+        println!(
+            "    {}    {}",
+            "jaster update".green(),
+            "Update to the latest version".bright_black()
+        );
+
+        println!();
+
+        println!("{}", "GitHub".yellow());
+        println!();
+
+        println!(
+            "    {}",
+            "https://github.com/JoeCelaster/Jaster".bright_black()
+        );
+
+        println!();
+
+        println!(
+            "{}",
+            "                 Enjoy the typing experience!"
+                .bold()
+                .cyan()
+        );
     } else {
-        println!("⚠️ Fix the issues above before starting Jaster.");
+        println!();
+        println!("⚠ Jaster is not ready.");
+        println!();
+        println!("Fix the issues above, then run:");
+        println!();
+        println!("    jaster doctor");
     }
+
+    println!();
+    println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
 
     Ok(())
 }
