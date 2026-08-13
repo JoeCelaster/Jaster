@@ -1,6 +1,6 @@
 [package]
 name = "jaster"
-version = "0.1.0"
+version = "1.0.9"
 edition = "2024"
 
 [dependencies]
@@ -10,3 +10,5 @@ rdev = "0.5"
 evdev = "0.13"
 libc = "0.2.189"
 udev = "0.9.3"
+reqwest = { version = "0.12", features = ["blocking", "json"] }
+serde = { version = "1", features = ["derive"] }

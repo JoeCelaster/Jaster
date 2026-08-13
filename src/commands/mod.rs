@@ -4,3 +4,4 @@ pub mod doctor;
 pub mod daemon;
 pub mod event;
 pub mod update;
+pub mod version;

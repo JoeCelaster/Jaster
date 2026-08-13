@@ -19,5 +19,6 @@ pub enum Commands {
     Daemon,
 
     Event,
-    Update
+    Update,
+    Version
 }

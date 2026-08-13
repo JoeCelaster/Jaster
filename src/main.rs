@@ -13,6 +13,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Commands::Stop => commands::stop::run()?,
         Commands::Event => commands::event::run()?,
         Commands::Update => commands::update::run()?,
+        Commands::Version => commands::version::run()?,
     }
 
     Ok(())
