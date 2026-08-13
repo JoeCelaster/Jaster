@@ -131,7 +131,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
         println!(
             "    {}    {}",
             "jaster doctor".green(),
-            "// Check Jaster's Health".bright_black()
+            "// Diagnose Jaster's Health".bright_black()
         );
 
         println!(
