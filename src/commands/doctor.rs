@@ -120,7 +120,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
 
 
         println!("    {}   {}", "jaster start".green(),
-            "start the mechanical key sound".bright_black());
+            "// Start Jaster".bright_black());
         println!();
 
 
@@ -131,25 +131,31 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
         println!(
             "    {}    {}",
             "jaster doctor".green(),
-            "Check installation".bright_black()
+            "// Check Jaster's Health".bright_black()
         );
 
         println!(
             "    {}     {}",
             "jaster event".green(),
-            "List detected keyboards".bright_black()
+            "// List detected keyboards".bright_black()
         );
 
         println!(
             "    {}      {}",
             "jaster stop".green(),
-            "Stop the Jaster daemon".bright_black()
+            "// Stop the Jaster daemon".bright_black()
         );
 
         println!(
             "    {}    {}",
             "jaster update".green(),
-            "Update to the latest version".bright_black()
+            "// Update to the latest version".bright_black()
+        );
+
+        println!(
+            "    {}   {}",
+            "jaster version".green(),
+            "// Jaster's latest version".bright_black()
         );
 
         println!();
