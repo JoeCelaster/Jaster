@@ -31,7 +31,7 @@ ${YELLOW}Get Started${RESET}
 
 ${YELLOW}Available Commands${RESET}
 
-    ${GREEN}jaster doctor${RESET}    ${GRAY}Check installation${RESET}
+    ${YELLOW}jaster doctor${RESET}    ${GRAY}Check installation${RESET}
     ${GREEN}jaster event${RESET}     ${GRAY}List detected keyboards${RESET}
     ${GREEN}jaster stop${RESET}      ${GRAY}Stop the Jaster daemon${RESET}
     ${GREEN}jaster update${RESET}    ${GRAY}Update to the latest version${RESET}
