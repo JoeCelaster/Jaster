@@ -15,7 +15,7 @@ impl AudioPlayer {
     ) {
         let sink = Sink::connect_new(mixer);
 
-        sink.append(sound.amplify(5.0));
+        sink.append(sound.amplify(2.0));
 
         sink.detach();
     }
