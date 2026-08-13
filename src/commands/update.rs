@@ -1,5 +1,8 @@
 use serde::Deserialize;
-use std::process::Command;
+use std::{
+    fs,
+    process::{Command, Stdio},
+};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -28,18 +31,16 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     println!("📦 New version available: v{}", latest);
-    println!("⬇️  Updating Jaster...\n");
+    println!("⬇️  Downloading updater...");
 
-    let status = Command::new("bash")
-        .arg("-c")
-        .arg("curl -fsSL https://raw.githubusercontent.com/JoeCelaster/Jaster/main/install.sh | bash")
-        .status()?;
+    println!("🚀 Launching installer...");
 
-    if !status.success() {
-        return Err("Update failed.".into());
-    }
+    Command::new("bash")
+    .arg("-c")
+    .arg("curl -fsSL https://raw.githubusercontent.com/JoeCelaster/Jaster/main/install.sh | bash")
+    .spawn()?;
 
-    println!("\n✅ Successfully updated to v{}!", latest);
+    println!("👋 Jaster will now exit so the update can finish.");
 
-    Ok(())
+    std::process::exit(0);
 }
