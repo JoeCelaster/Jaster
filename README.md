@@ -46,6 +46,7 @@ That's it. Jaster is now running, and your keyboard will produce typing sounds.
 | `jaster update` | Update Jaster to the latest version. |
 | `jaster doctor` | Check installation, permissions, and system status. |
 | `jaster event` | Display keyboard events detected by Jaster. |
+| `jaster version` | Jaster's latest version. |
 
 ---
 
