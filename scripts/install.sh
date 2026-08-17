@@ -29,9 +29,17 @@ ${YELLOW}Get Started${RESET}
 
     ${GREEN}jaster start${RESET}
 
+${YELLOW}Volume${RESET}   -   ${GRAY}starts at 150${RESET}
+
+    ${GRAY}60 for headphones${RESET}   ${GREEN}jaster volume 60${RESET}
+    ${GRAY}150 for speakers${RESET}    ${GREEN}jaster volume 150${RESET}
+
 ${YELLOW}Available Commands${RESET}
 
     ${YELLOW}jaster doctor${RESET}    ${GRAY}Check installation${RESET}
+    ${GREEN}jaster sounds${RESET}    ${GRAY}List installed sound packs and their shortcuts${RESET}
+    ${GREEN}jaster oreo${RESET}      ${GRAY}Switch sound instantly, e.g. oreo, blue, topre${RESET}
+    ${GREEN}jaster volume${RESET}    ${GRAY}Show or set the volume: 60, up, down, mute${RESET}
     ${GREEN}jaster event${RESET}     ${GRAY}List detected keyboards${RESET}
     ${GREEN}jaster stop${RESET}      ${GRAY}Stop the Jaster daemon${RESET}
     ${GREEN}jaster update${RESET}    ${GRAY}Update to the latest version${RESET}

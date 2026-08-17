@@ -4,6 +4,9 @@ use clap::{Parser, Subcommand};
 #[command(name = "jaster")]
 #[command(version = "0.1.0")]
 #[command(about = "Your keyboard. Your sound.")]
+#[command(after_help = "Shortcuts:\n  \
+    jaster <sound>    Switch sound instantly, e.g. `jaster oreo`, `jaster blue`\n  \
+    jaster sounds     Every pack and its shortcut")]
 pub struct Cli {
     #[command(subcommand)]
     pub command: Commands,
@@ -11,14 +14,35 @@ pub struct Cli {
 
 #[derive(Subcommand)]
 pub enum Commands {
-    Start,
+    Start {
+        /// Sound pack to use (skips the picker), e.g. cherrymx or nk-cream
+        #[arg(short, long, value_name = "PACK")]
+        sound: Option<String>,
+    },
     Stop,
     Doctor,
 
+    /// List the installed sound packs
+    Sounds,
+
+    /// Show or set the typing volume: a percentage, up, down, or mute
+    #[command(alias = "vol")]
+    Volume {
+        #[arg(value_name = "LEVEL")]
+        value: Option<String>,
+    },
+
     #[command(hide = true)]
-    Daemon,
+    Daemon {
+        #[arg(short, long, value_name = "PACK")]
+        sound: Option<String>,
+    },
 
     Event,
     Update,
-    Version
+    Version,
+
+    /// Switch to a sound pack by shortcut, e.g. `jaster oreo`
+    #[command(external_subcommand)]
+    Switch(Vec<String>),
 }

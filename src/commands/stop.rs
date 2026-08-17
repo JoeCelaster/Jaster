@@ -1,24 +1,30 @@
-use std::{fs, process::Command};
+use std::process::{Command, Stdio};
+
+use crate::utils::pid;
 
 pub fn run() -> Result<(), Box<dyn std::error::Error>> {
-    let home = std::env::var("HOME")?;
-    let pid_file = format!("{}/.local/share/jaster/jaster.pid", home);
-
-    let pid = match fs::read_to_string(&pid_file) {
-        Ok(pid) => pid,
-        Err(_) => {
-            println!("Jaster is not running.");
-            return Ok(());
-        }
-    };
-
-    Command::new("kill")
-        .arg(pid.trim())
-        .status()?;
-
-    let _ = fs::remove_file(pid_file);
-
-    println!("✓ Jaster stopped.");
+    if terminate() {
+        println!("✓ Jaster stopped.");
+    } else {
+        println!("Jaster is not running.");
+    }
 
     Ok(())
+}
+
+/// Kill the running daemon, if there is one. Returns whether it was running.
+pub fn terminate() -> bool {
+    let running = pid::running();
+
+    if let Some(pid) = running {
+        let _ = Command::new("kill")
+            .arg(pid.to_string())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status();
+    }
+
+    pid::remove();
+
+    running.is_some()
 }

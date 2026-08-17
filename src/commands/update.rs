@@ -1,5 +1,8 @@
+use colored::*;
 use serde::Deserialize;
 use std::process::Command;
+
+use crate::audio::volume;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -24,6 +27,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
 
     if latest == VERSION {
         println!("✅ Jaster is already up to date (v{}).", VERSION);
+        println!("🔉 {}", volume::advice().bright_black());
         return Ok(());
     }
 
@@ -50,6 +54,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
         )
         .spawn()?;
 
+    println!("🔉 {}", volume::advice().bright_black());
     println!("👋 Jaster will now exit so the update can finish.");
 
     std::process::exit(0);

@@ -3,6 +3,8 @@ use crate::{
         cache::SoundCache,
         engine::AudioEngine,
         player::AudioPlayer,
+        theme,
+        volume::Level,
     },
     keyboard::discovery::find_keyboards,
 };
@@ -13,14 +15,19 @@ use std::{
     thread,
 };
 
-pub fn run() -> Result<(), Box<dyn std::error::Error>> {
+pub fn run(sound: Option<String>) -> Result<(), Box<dyn std::error::Error>> {
     println!("🎹 Jaster daemon started.");
 
     let engine = Arc::new(AudioEngine::new()?);
     println!("✓ Audio engine initialized");
 
-    let cache = Arc::new(SoundCache::new()?);
-    println!("✓ Sound cache loaded");
+    let pack = theme::resolve(sound.as_deref())?;
+
+    let cache = Arc::new(SoundCache::load(&pack)?);
+    println!("✓ Sound pack loaded: {} ({} keys)", pack.name, cache.sounds.len());
+
+    let level = Level::watch();
+    println!("✓ Volume {}%", level.percent());
 
     println!("🔍 Discovering keyboards...");
     let keyboards = find_keyboards()?;
@@ -45,6 +52,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
 
         let engine = Arc::clone(&engine);
         let cache = Arc::clone(&cache);
+        let level = level.clone();
 
         let handle = thread::spawn(move || {
             println!("🎧 Listening on {}", device_name);
@@ -58,12 +66,12 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                                 if value == 1 {
                                     println!("⌨️  {}: {:?}", device_name, key);
                                 }
-                                if value == 1 {
-                                    if let Some(sound) = cache.sounds.get(&key) {
-                                        AudioPlayer::play(engine.mixer(), sound.clone());
-                                    } else {
-                                        AudioPlayer::play(engine.mixer(), cache.generic.clone());
-                                    }
+                                let gain = level.gain();
+
+                                if value == 1 && gain > 0.0 {
+                                    let sound = cache.sounds.get(&key).unwrap_or(&cache.generic);
+
+                                    AudioPlayer::play(engine.mixer(), sound.clone(), gain);
                                 }
                             }
                         }

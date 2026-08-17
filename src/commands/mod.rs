@@ -1,6 +1,9 @@
 pub mod start;
 pub mod stop;
 pub mod doctor;
+pub mod sounds;
+pub mod switch;
+pub mod volume;
 pub mod daemon;
 pub mod event;
 pub mod update;

@@ -41,12 +41,109 @@ That's it. Jaster is now running, and your keyboard will produce typing sounds.
 
 | Command | Description |
 |---------|-------------|
-| `jaster start` | Start Jaster and enable typing sounds. |
+| `jaster start` | Start Jaster and enable typing sounds. Asks which sound pack to use. |
+| `jaster <sound>` | Switch to a sound pack by shortcut, e.g. `jaster oreo`. |
+| `jaster sounds` | List the installed sound packs and their shortcuts. |
+| `jaster volume` | Show or set how loud typing is. |
 | `jaster stop` | Stop Jaster. |
 | `jaster update` | Update Jaster to the latest version. |
 | `jaster doctor` | Check installation, permissions, and system status. |
 | `jaster event` | Display keyboard events detected by Jaster. |
 | `jaster version` | Jaster's latest version. |
+
+---
+
+## Sound packs
+
+Running `jaster start` asks which keyboard you want to sound like:
+
+```
+  Choose your keyboard sound (↑/↓ to move, enter to select)
+
+  ❯ CherryMX Black - PBT keycaps       cherrymx-black-pbt
+    CherryMX Blue - PBT keycaps        cherrymx-blue-pbt
+    CherryMX Brown - PBT keycaps       cherrymx-brown-pbt
+    CherryMX Red - PBT keycaps         cherrymx-red-pbt
+    EG Crystal Purple                  eg-crystal-purple
+    EG Oreo                            eg-oreo
+    NK Cream (original by Ryan)        nk-cream
+    Topre Purple Hybrid - PBT keycaps  topre-purple-hybrid-pbt
+```
+
+Your choice is remembered, so the next `jaster start` defaults to it.
+
+### Switching sounds
+
+Every pack has a one-word shortcut. Type it to switch immediately — Jaster
+restarts on the new sound, or starts if it wasn't running:
+
+```bash
+jaster oreo      # EG Oreo
+jaster blue      # CherryMX Blue
+jaster nkcream   # NK Cream
+```
+
+| Shortcut | Sound pack |
+|----------|------------|
+| `jaster black` | CherryMX Black - PBT keycaps |
+| `jaster blue` | CherryMX Blue - PBT keycaps |
+| `jaster brown` | CherryMX Brown - PBT keycaps |
+| `jaster red` | CherryMX Red - PBT keycaps |
+| `jaster crystal` | EG Crystal Purple |
+| `jaster oreo` | EG Oreo |
+| `jaster nkcream` | NK Cream |
+| `jaster topre` | Topre Purple Hybrid - PBT keycaps |
+
+Run `jaster sounds` any time to see the list with the current pack marked.
+
+To pick a pack without the picker in a script or startup service, use the flag
+form instead:
+
+```bash
+jaster start --sound topre
+```
+
+Both forms accept the shortcut, the full id, or any unambiguous fragment of
+either. `jaster cherry` is rejected, since four packs match, and Jaster lists the
+candidates instead of guessing.
+
+Every pack is levelled to the same loudness when it loads, so switching sounds
+changes the character of the typing, never the volume.
+
+---
+
+## Volume
+
+**60 is best for headphones. 150 is best for speakers** — and 150 is where Jaster
+starts, so headphone users want:
+
+```bash
+jaster volume 60
+```
+
+```
+🔉 ▓▓▓░░░░░░░ 60%
+```
+
+The rest:
+
+```bash
+jaster volume        # show the current level
+jaster volume up     # ±10 per step
+jaster volume down
+jaster volume mute   # same as 0
+jaster volume max    # 200, the ceiling
+```
+
+Changes apply to a running Jaster within a moment — no restart, no need to stop
+typing. `jaster vol` is a shorter alias. Loud settings stay clean: the peaks of
+each keypress are eased down rather than allowed to clip.
+
+To see what is installed:
+
+```bash
+jaster sounds
+```
 
 ---
 

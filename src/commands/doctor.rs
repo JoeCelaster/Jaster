@@ -121,6 +121,13 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
 
         println!("    {}   {}", "jaster start".green(),
             "// Start Jaster".bright_black());
+
+        println!(
+            "    {}    {}",
+            "jaster oreo".green(),
+            "// Switch sound instantly (see jaster sounds)".bright_black()
+        );
+
         println!();
 
 
@@ -132,6 +139,18 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             "    {}    {}",
             "jaster doctor".green(),
             "// Diagnose Jaster Health".bright_black()
+        );
+
+        println!(
+            "    {}    {}",
+            "jaster sounds".green(),
+            "// List installed sound packs".bright_black()
+        );
+
+        println!(
+            "    {}    {}",
+            "jaster volume".green(),
+            "// Show or set the volume  | headphones - 60 | speakers - 150".bright_black()
         );
 
         println!(
