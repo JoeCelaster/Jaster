@@ -1,5 +1,5 @@
-use evdev::KeyCode;
 use jaster::audio::{cache::SoundCache, theme};
+use jaster::keyboard::Key;
 use rodio::Source;
 
 #[test]
@@ -13,10 +13,16 @@ fn every_installed_pack_loads() {
             .unwrap_or_else(|err| panic!("failed to load '{}': {err}", pack.id));
 
         for key in [
-            KeyCode::KEY_A,
-            KeyCode::KEY_SPACE,
-            KeyCode::KEY_ENTER,
-            KeyCode::KEY_BACKSPACE,
+            Key::A,
+            Key::SPACE,
+            Key::ENTER,
+            Key::BACKSPACE,
+            // Arrow keys are written with an extended-key encoding the pack
+            // loader used to skip, so they are worth asserting explicitly.
+            Key::UP,
+            Key::DOWN,
+            Key::LEFT,
+            Key::RIGHT,
         ] {
             assert!(
                 cache.sounds.contains_key(&key),
@@ -49,7 +55,7 @@ fn single_packs_slice_their_sound_sheet() {
     let pack = theme::find("cherrymx-black-pbt").expect("pack installed");
 
     let cache = SoundCache::load(&pack).expect("pack loads");
-    let key = cache.sounds.get(&KeyCode::KEY_A).expect("a is defined");
+    let key = cache.sounds.get(&Key::A).expect("a is defined");
 
     // config.json defines key 30 (a) as 160ms of the sheet.
     let duration = key.total_duration().expect("clip has a known duration");

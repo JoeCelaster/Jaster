@@ -2,7 +2,7 @@ use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
 #[command(name = "jaster")]
-#[command(version = "0.1.0")]
+#[command(version)]
 #[command(about = "Your keyboard. Your sound.")]
 #[command(after_help = "Shortcuts:\n  \
     jaster <sound>    Switch sound instantly, e.g. `jaster oreo`, `jaster blue`\n  \

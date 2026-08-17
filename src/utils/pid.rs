@@ -1,19 +1,15 @@
-use std::{
-    fs,
-    path::PathBuf,
-};
+use std::{fs, path::PathBuf};
 
-pub fn pid_file() -> PathBuf {
-    let home = std::env::var("HOME").unwrap();
-    PathBuf::from(home)
-        .join(".local")
-        .join("share")
-        .join("jaster")
-        .join("jaster.pid")
+use crate::utils::paths;
+
+pub fn pid_file() -> Option<PathBuf> {
+    Some(paths::data_dir()?.join("jaster.pid"))
 }
 
 pub fn save(pid: u32) -> std::io::Result<()> {
-    let path = pid_file();
+    let path = pid_file().ok_or_else(|| {
+        std::io::Error::other("Could not determine a data directory")
+    })?;
 
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
@@ -26,21 +22,64 @@ pub fn save(pid: u32) -> std::io::Result<()> {
 /// a stale PID file can otherwise point at a recycled, unrelated process.
 pub fn running() -> Option<u32> {
     let pid = load()?;
-    let command = fs::read_to_string(format!("/proc/{pid}/comm")).ok()?;
 
-    command.trim().contains("jaster").then_some(pid)
+    is_jaster(pid).then_some(pid)
+}
+
+#[cfg(unix)]
+fn is_jaster(pid: u32) -> bool {
+    fs::read_to_string(format!("/proc/{pid}/comm"))
+        .is_ok_and(|command| command.trim().contains("jaster"))
+}
+
+/// Windows has no `/proc`, so ask the kernel directly: the process must still
+/// be running *and* its image must be Jaster, which is the same recycled-PID
+/// guard the Linux path gets from `comm`.
+#[cfg(windows)]
+fn is_jaster(pid: u32) -> bool {
+    use windows_sys::Win32::Foundation::{CloseHandle, WAIT_TIMEOUT};
+    use windows_sys::Win32::System::Threading::{
+        OpenProcess, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION,
+        QueryFullProcessImageNameW, WaitForSingleObject,
+    };
+
+    unsafe {
+        let handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
+
+        if handle.is_null() {
+            return false;
+        }
+
+        // A process can have exited while a handle keeps its PID reserved.
+        // Signalled means exited, so only a timeout proves it is still alive.
+        let alive = WaitForSingleObject(handle, 0) == WAIT_TIMEOUT;
+
+        let mut buffer = [0u16; 260];
+        let mut length = buffer.len() as u32;
+
+        let named = QueryFullProcessImageNameW(
+            handle,
+            PROCESS_NAME_WIN32,
+            buffer.as_mut_ptr(),
+            &mut length,
+        ) != 0;
+
+        CloseHandle(handle);
+
+        alive
+            && named
+            && String::from_utf16_lossy(&buffer[..length as usize])
+                .to_ascii_lowercase()
+                .contains("jaster")
+    }
 }
 
 pub fn load() -> Option<u32> {
-    let path = pid_file();
-
-    fs::read_to_string(path)
-        .ok()?
-        .trim()
-        .parse()
-        .ok()
+    fs::read_to_string(pid_file()?).ok()?.trim().parse().ok()
 }
 
 pub fn remove() {
-    let _ = fs::remove_file(pid_file());
+    if let Some(path) = pid_file() {
+        let _ = fs::remove_file(path);
+    }
 }

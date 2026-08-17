@@ -1,5 +1,5 @@
 use colored::*;
-use std::io::{self, Read, Write};
+use std::io::{self, IsTerminal, Read, Write};
 
 pub struct Item {
     pub label: String,
@@ -13,18 +13,24 @@ pub enum Selection {
     NotInteractive,
 }
 
+fn is_interactive() -> bool {
+    io::stdin().is_terminal() && io::stdout().is_terminal()
+}
+
 /// Restores the terminal however the prompt ends.
+#[cfg(unix)]
 struct RawMode {
     original: libc::termios,
 }
 
+#[cfg(unix)]
 impl RawMode {
     fn enable() -> Option<Self> {
-        unsafe {
-            if libc::isatty(libc::STDIN_FILENO) != 1 || libc::isatty(libc::STDOUT_FILENO) != 1 {
-                return None;
-            }
+        if !is_interactive() {
+            return None;
+        }
 
+        unsafe {
             let mut original: libc::termios = std::mem::zeroed();
 
             if libc::tcgetattr(libc::STDIN_FILENO, &mut original) != 0 {
@@ -43,6 +49,7 @@ impl RawMode {
     }
 }
 
+#[cfg(unix)]
 impl Drop for RawMode {
     fn drop(&mut self) {
         print!("\x1b[?25h");
@@ -50,6 +57,82 @@ impl Drop for RawMode {
 
         unsafe {
             libc::tcsetattr(libc::STDIN_FILENO, libc::TCSANOW, &self.original);
+        }
+    }
+}
+
+#[cfg(windows)]
+struct RawMode {
+    stdin: windows_sys::Win32::Foundation::HANDLE,
+    stdout: windows_sys::Win32::Foundation::HANDLE,
+    input: u32,
+    output: u32,
+}
+
+#[cfg(windows)]
+impl RawMode {
+    /// Windows does not deliver arrow keys as bytes unless the console is put
+    /// into virtual-terminal input mode; with it, the same `ESC [ A` sequences
+    /// this picker already parses arrive on stdin. Without VT we return `None`,
+    /// and the caller falls back to the last used pack rather than showing a
+    /// menu whose arrows do nothing.
+    fn enable() -> Option<Self> {
+        use windows_sys::Win32::System::Console::{
+            ENABLE_ECHO_INPUT, ENABLE_LINE_INPUT, ENABLE_PROCESSED_INPUT,
+            ENABLE_VIRTUAL_TERMINAL_INPUT, ENABLE_VIRTUAL_TERMINAL_PROCESSING, GetConsoleMode,
+            GetStdHandle, STD_INPUT_HANDLE, STD_OUTPUT_HANDLE, SetConsoleMode,
+        };
+
+        if !is_interactive() {
+            return None;
+        }
+
+        unsafe {
+            let stdin = GetStdHandle(STD_INPUT_HANDLE);
+            let stdout = GetStdHandle(STD_OUTPUT_HANDLE);
+
+            let mut input = 0u32;
+            let mut output = 0u32;
+
+            if GetConsoleMode(stdin, &mut input) == 0 || GetConsoleMode(stdout, &mut output) == 0 {
+                return None;
+            }
+
+            // Ctrl-C arrives as byte 3, which the key loop already handles.
+            let raw_input = (input
+                & !(ENABLE_LINE_INPUT | ENABLE_ECHO_INPUT | ENABLE_PROCESSED_INPUT))
+                | ENABLE_VIRTUAL_TERMINAL_INPUT;
+
+            if SetConsoleMode(stdin, raw_input) == 0 {
+                return None;
+            }
+
+            if SetConsoleMode(stdout, output | ENABLE_VIRTUAL_TERMINAL_PROCESSING) == 0 {
+                SetConsoleMode(stdin, input);
+                return None;
+            }
+
+            Some(Self {
+                stdin,
+                stdout,
+                input,
+                output,
+            })
+        }
+    }
+}
+
+#[cfg(windows)]
+impl Drop for RawMode {
+    fn drop(&mut self) {
+        use windows_sys::Win32::System::Console::SetConsoleMode;
+
+        print!("\x1b[?25h");
+        let _ = io::stdout().flush();
+
+        unsafe {
+            SetConsoleMode(self.stdin, self.input);
+            SetConsoleMode(self.stdout, self.output);
         }
     }
 }

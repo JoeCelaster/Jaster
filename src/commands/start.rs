@@ -1,9 +1,6 @@
 use colored::*;
 use std::process::{Command, Stdio};
 
-#[cfg(unix)]
-use std::os::unix::process::CommandExt;
-
 use crate::audio::theme::{self, SoundPack};
 use crate::audio::volume;
 use crate::commands::stop;
@@ -40,27 +37,62 @@ pub fn spawn(pack: &SoundPack) -> Result<bool, Box<dyn std::error::Error>> {
 
     let mut command = Command::new(exe);
 
-    command
-        .arg("daemon")
-        .arg("--sound")
-        .arg(&pack.id)
-        .stdin(Stdio::null())
-        .stdout(Stdio::inherit())
-        .stderr(Stdio::inherit());
+    command.arg("daemon").arg("--sound").arg(&pack.id);
 
-    #[cfg(unix)]
-    unsafe {
-        command.pre_exec(|| {
-            libc::setsid();
-            Ok(())
-        });
-    }
+    detach(&mut command);
 
     let child = command.spawn()?;
 
     pid::save(child.id())?;
 
     Ok(replaced)
+}
+
+/// Put the daemon in its own session so it outlives this terminal.
+#[cfg(unix)]
+fn detach(command: &mut Command) {
+    use std::os::unix::process::CommandExt;
+
+    command
+        .stdin(Stdio::null())
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit());
+
+    unsafe {
+        command.pre_exec(|| {
+            libc::setsid();
+            Ok(())
+        });
+    }
+}
+
+/// A detached process has no console, so its inherited handles would be
+/// invalid and the daemon's first `println!` would panic. Send its output to a
+/// log file instead — which is also the only way to see why it failed.
+#[cfg(windows)]
+fn detach(command: &mut Command) {
+    use std::os::windows::process::CommandExt;
+
+    const DETACHED_PROCESS: u32 = 0x0000_0008;
+    const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
+
+    let log = crate::utils::paths::data_dir().and_then(|dir| {
+        std::fs::create_dir_all(&dir).ok()?;
+        let file = std::fs::File::create(dir.join("daemon.log")).ok()?;
+        let clone = file.try_clone().ok()?;
+        Some((file, clone))
+    });
+
+    let (out, err) = match log {
+        Some((file, clone)) => (Stdio::from(file), Stdio::from(clone)),
+        None => (Stdio::null(), Stdio::null()),
+    };
+
+    command
+        .stdin(Stdio::null())
+        .stdout(out)
+        .stderr(err)
+        .creation_flags(DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP);
 }
 
 /// An explicit `--sound` wins; otherwise ask, falling back to the last used

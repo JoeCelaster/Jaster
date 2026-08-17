@@ -4,18 +4,20 @@
 
 **Bring mechanical typing sounds to your native keyboard.**
 
-Jaster is a lightweight CLI application that adds realistic mechanical typing sounds to any keyboard on Linux, providing an immersive typing experience with minimal setup.
+Jaster is a lightweight CLI application that adds realistic mechanical typing sounds to any keyboard on Linux and Windows, providing an immersive typing experience with minimal setup.
 
 ---
 
 > [!NOTE]
 > **Current Platform Support**
 >
-> Jaster currently supports **Linux-based distributions** only.
+> Jaster supports **Linux** and **Windows**.
 >
-> Support for **Windows** and **macOS** is under active development as part of Jaster's cross-platform roadmap.
+> Support for **macOS** is under active development as part of Jaster's cross-platform roadmap.
 
 ## Installation
+
+### Linux
 
 Copy and paste the following commands into your terminal:
 
@@ -30,6 +32,21 @@ sudo usermod -aG input $USER
 exec su - "$USER"
 
 # Start Jaster and enable typing sounds
+jaster start
+```
+
+### Windows
+
+Paste this into PowerShell. No administrator rights are needed — Jaster
+installs into your own user profile:
+
+```powershell
+irm https://raw.githubusercontent.com/JoeCelaster/Jaster/main/install.ps1 | iex
+```
+
+Then **open a new terminal** so the PATH change takes effect, and run:
+
+```powershell
 jaster start
 ```
 
@@ -155,9 +172,16 @@ Jaster listens for keyboard input events and plays synchronized typing sounds in
 
 ## Requirements
 
-- Linux
+**Linux**
+
 - Audio system supported by your distribution (ALSA/PipeWire/PulseAudio)
 - Permission to access `/dev/input` devices
+
+**Windows**
+
+- Windows 10 or later
+- Nothing else. Audio and key capture both use built-in Windows APIs, and the
+  install needs no administrator rights.
 
 ---
 
@@ -171,36 +195,55 @@ Verify your installation:
 jaster doctor
 ```
 
-Check whether keyboard events are being detected:
+Check whether keyboard input is being detected:
 
 ```bash
 jaster event
 ```
 
-If no events appear, ensure your user has been added to the `input` group and that you've refreshed your login session:
+**On Linux**, if no keyboards appear, ensure your user has been added to the
+`input` group and that you've refreshed your login session:
 
 ```bash
 sudo usermod -aG input $USER
 exec su - "$USER"
 ```
 
+**On Windows**, two things are worth knowing:
+
+- Anti-cheat software (Vanguard, EasyAntiCheat, BattlEye) and some endpoint
+  security agents block low-level keyboard hooks. `jaster doctor` tells you
+  whether the hook can be installed.
+- Keys typed into windows running as administrator are silent unless Jaster is
+  also running elevated. That is a Windows security boundary, not a bug.
+
+The detached daemon writes its output to `%LOCALAPPDATA%\Jaster\daemon.log`,
+which is the place to look if `jaster start` succeeds but nothing plays.
+
 ---
 
 ## Uninstall
 
-Remove the installed binary:
+**Linux** — remove the installed binary and its sounds:
 
 ```bash
 sudo rm /usr/local/bin/jaster
+sudo rm -rf /usr/share/jaster
+rm -rf ~/.local/share/jaster
 ```
 
-Verify removal:
+**Windows** — stop Jaster, then remove its folder and PATH entry:
 
-```bash
-which jaster
+```powershell
+jaster stop
+Remove-Item -Recurse -Force "$env:LOCALAPPDATA\Jaster"
 ```
 
-If nothing is returned, Jaster has been removed successfully.
+Then remove `%LOCALAPPDATA%\Jaster` from your user PATH under
+*Settings → System → About → Advanced system settings → Environment Variables*.
+
+Verify removal by opening a new terminal and checking that `jaster` is no
+longer found.
 
 ## Contributing
 

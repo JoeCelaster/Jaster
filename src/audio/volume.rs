@@ -26,15 +26,7 @@ pub fn advice() -> String {
 const POLL: Duration = Duration::from_millis(400);
 
 fn file() -> Option<PathBuf> {
-    let home = std::env::var("HOME").ok()?;
-
-    Some(
-        PathBuf::from(home)
-            .join(".local")
-            .join("share")
-            .join("jaster")
-            .join("volume"),
-    )
+    Some(crate::utils::paths::data_dir()?.join("volume"))
 }
 
 pub fn load() -> u32 {
@@ -50,7 +42,7 @@ pub fn load() -> u32 {
 }
 
 pub fn save(percent: u32) -> Result<(), Box<dyn std::error::Error>> {
-    let path = file().ok_or("HOME is not set")?;
+    let path = file().ok_or("Could not determine a data directory")?;
 
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;

@@ -7,31 +7,28 @@ This guide gets you from a fresh clone to a running development build of Jaster 
 
 ## Read this first: the current platform reality
 
-Jaster's runtime is **Linux-only today**, and that is enforced at the dependency
-level, not just at runtime:
+**Linux and Windows are both first-class targets.** Each builds and runs
+natively, and CI checks both on every push.
 
-| Crate | Why it is Linux-only | Declared in `Cargo.toml` as |
-|-------|----------------------|------------------------------|
-| `evdev` | Wraps the Linux input subsystem (`/dev/input`) via `nix` ioctls | unconditional dependency |
-| `udev`  | Binds `libudev-sys`, resolved through `pkg-config` | unconditional dependency |
+Platform-specific code lives in exactly two places, and the rest of the
+codebase is free of `#[cfg]`:
 
-Because both are unconditional, **`cargo build` fails on macOS and Windows before
-any Jaster code is even compiled.** This is not a bug you have caused — it is the
-main thing the cross-platform port has to fix.
+| Concern | Linux | Windows |
+|---------|-------|---------|
+| Key capture | `src/keyboard/linux.rs` — `evdev`, one thread per `/dev/input` device | `src/keyboard/windows.rs` — a `WH_KEYBOARD_LL` hook and its message pump |
+| Paths, process control, console | `#[cfg(unix)]` arms in `src/utils/` and `src/commands/` | `#[cfg(windows)]` arms alongside them |
 
-What this means for you:
+`src/keyboard/mod.rs` picks the backend with `#[cfg_attr(..., path = ...)]`, so
+both sides must export the same `listen` and `sources`; a symbol missing from
+one is a compile error rather than a silent gap.
 
-- **Linux contributors** can build, run, and test everything natively.
-- **macOS and Windows contributors** can still contribute today, but you need a
-  Linux environment (VM, WSL2, or container) to compile and run. See
-  [macOS](#macos) and [Windows](#windows) below.
-- The cross-platform port itself is tracked in
-  [Porting roadmap](#porting-roadmap-what-cross-platform-work-actually-needs) —
-  that section is the highest-value place to contribute right now.
+Everything else already travels. `rodio` selects ALSA on Linux and WASAPI on
+Windows automatically, and the decode/slice/normalize/limit pipeline in
+`src/audio/` has no OS dependency at all.
 
-The good news: `rdev`, which is *already* a dependency and already wrapped in
-`src/keyboard/hook.rs`, is genuinely cross-platform (X11 on Linux, CoreGraphics on
-macOS, Win32 on Windows). The port has a clear path.
+**macOS is not supported yet.** `src/keyboard/mod.rs` fails the build with a
+clear message there. See [macOS](#macos) — adding a third backend is now a
+matter of writing one file to that same two-function interface.
 
 ---
 
@@ -73,9 +70,9 @@ This is the fully supported path. Everything below works natively.
 
 ### 1. Install system dependencies
 
-Jaster links against ALSA (audio), libudev (device enumeration), and X11 +
-XTest + XInput (used by the `rdev` hook layer). These are the same packages the
-release CI installs.
+Jaster links against ALSA for audio. That is the only system library it needs —
+`evdev` is pure Rust, and the X11 packages that used to be required went away
+with the `rdev` dependency. These are the same packages the release CI installs.
 
 **Debian / Ubuntu / Pop!\_OS / Mint**
 
@@ -84,12 +81,7 @@ sudo apt-get update
 sudo apt-get install -y \
   build-essential \
   pkg-config \
-  libasound2-dev \
-  libudev-dev \
-  libx11-dev \
-  libxtst-dev \
-  libxi-dev \
-  libxrandr-dev
+  libasound2-dev
 ```
 
 **Fedora / RHEL**
@@ -98,12 +90,7 @@ sudo apt-get install -y \
 sudo dnf install -y \
   gcc \
   pkgconf-pkg-config \
-  alsa-lib-devel \
-  systemd-devel \
-  libX11-devel \
-  libXtst-devel \
-  libXi-devel \
-  libXrandr-devel
+  alsa-lib-devel
 ```
 
 **Arch / Manjaro**
@@ -112,12 +99,7 @@ sudo dnf install -y \
 sudo pacman -S --needed \
   base-devel \
   pkgconf \
-  alsa-lib \
-  systemd-libs \
-  libx11 \
-  libxtst \
-  libxi \
-  libxrandr
+  alsa-lib
 ```
 
 **openSUSE**
@@ -126,12 +108,7 @@ sudo pacman -S --needed \
 sudo zypper install -y \
   gcc \
   pkg-config \
-  alsa-devel \
-  systemd-devel \
-  libX11-devel \
-  libXtst-devel \
-  libXi-devel \
-  libXrandr-devel
+  alsa-devel
 ```
 
 ### 2. Grant keyboard access
@@ -173,22 +150,24 @@ cargo run -- stop      # stop it
 > `assets/sounds` relative to the current working directory, falling back to the
 > installed path `/usr/share/jaster/sounds`. From any other directory, a dev build
 > silently loads the *installed* sounds instead of the ones in your working tree.
+> Set `JASTER_SOUNDS=/path/to/assets/sounds` to pin it explicitly — see
+> `sound_root()` in `src/utils/paths.rs` for the full resolution order.
 
 ### A note on Wayland
 
-Device reading through `evdev` works on both X11 and Wayland, so `jaster start`
-is fine either way. The `rdev`-based hook in `src/keyboard/hook.rs` is X11-only
-and will not capture events under a pure Wayland session — worth knowing if you
-start working on that layer.
+Jaster reads devices through `evdev`, below the display server, so `jaster start`
+works identically on X11 and Wayland. There is no X11 dependency anywhere in the
+Linux backend.
 
 ---
 
 ## macOS
 
-**Native `cargo build` does not work yet** — it fails while compiling `evdev` and
-`udev`. Choose one of the two paths below.
+**macOS is not supported yet.** The build stops with a `compile_error!` from
+`src/keyboard/mod.rs` saying so, rather than a dependency failure. Choose one of
+the two paths below.
 
-### Path A — contribute via a Linux environment (recommended for now)
+### Path A — contribute to Linux/Windows from macOS
 
 Use a Linux VM or container to build and run, and edit code natively on macOS.
 
@@ -199,8 +178,7 @@ docker run --rm -it \
   -v "$PWD":/work -w /work \
   rust:1.97 \
   bash -c "apt-get update && \
-           apt-get install -y pkg-config libasound2-dev libudev-dev \
-             libx11-dev libxtst-dev libxi-dev libxrandr-dev && \
+           apt-get install -y pkg-config libasound2-dev && \
            cargo build"
 ```
 
@@ -223,10 +201,12 @@ xcode-select --install          # Apple's command line tools (clang, linker)
 brew install pkg-config         # if you do not already have it
 ```
 
-macOS needs no extra audio packages — `rodio` targets CoreAudio directly, and
-`rdev` targets CoreGraphics. Once `evdev`/`udev` are properly gated (see
-[Porting roadmap](#porting-roadmap-what-cross-platform-work-actually-needs)), the
-crate should compile natively with just the above.
+macOS needs no extra audio packages — `rodio` targets CoreAudio directly. The
+Linux-only dependencies are already gated behind
+`[target.'cfg(target_os = "linux")'.dependencies]`, so nothing blocks the build
+except the missing backend itself: `src/keyboard/mod.rs` raises a
+`compile_error!` until a `macos.rs` exists. See
+[Porting roadmap](#porting-roadmap-adding-macos).
 
 **macOS permissions.** Any global key listener on macOS requires the user to
 grant your terminal (or the built binary) **Input Monitoring** and, for some
@@ -234,58 +214,89 @@ APIs, **Accessibility** access:
 
 `System Settings → Privacy & Security → Input Monitoring` (and `→ Accessibility`)
 
-Without it, `rdev::listen` returns an error or silently receives no events. The
-macOS port will need to detect this state and surface it in `jaster doctor`, the
-same way the Linux path surfaces the `input` group requirement.
+Without it, an event tap silently receives nothing. The macOS port will need to
+detect this state and surface it in `jaster doctor`, the same way the Linux path
+surfaces the `input` group requirement and the Windows path reports a blocked
+hook.
 
 ---
 
 ## Windows
 
-**Native `cargo build` does not work yet** — same `evdev` / `udev` failure as
-macOS. Choose one of the two paths below.
-
-### Path A — contribute via WSL2 (recommended for now)
-
-```powershell
-wsl --install -d Ubuntu
-```
-
-Then, **inside** the WSL2 shell, follow the entire [Linux](#linux) section
-(system packages, `input` group, build).
-
-Important WSL2 caveats:
-
-- **Clone inside the WSL filesystem** (e.g. `~/Jaster`), not under `/mnt/c/...`.
-  Cargo builds across the Windows/Linux filesystem boundary are dramatically
-  slower and can hit file-locking issues.
-- **WSL2 has no access to your physical keyboard's `/dev/input` devices.**
-  `jaster event` will find nothing, and `jaster start` will exit with
-  "No keyboards found." This is expected — WSL2 does not pass through host HID
-  devices.
-- WSLg provides audio, so audio-side changes can be checked, but full end-to-end
-  behavior needs real Linux hardware or a VM with USB passthrough.
-
-So WSL2 is excellent for **compiling, linting, and reviewing code**, and not
-suitable for **hardware verification**. Note that limitation in your PR and a
-Linux maintainer can confirm runtime behavior.
-
-### Path B — work on the Windows port itself
-
-Install the native build toolchain:
+Windows builds and runs natively. Install the toolchain:
 
 1. [Visual Studio Build Tools](https://visualstudio.microsoft.com/downloads/)
    with the **"Desktop development with C++"** workload (provides the MSVC
    linker that Rust's default `x86_64-pc-windows-msvc` target requires).
 2. Rust via [`rustup-init.exe`](https://rustup.rs).
 
-No extra audio libraries are needed — `rodio` uses WASAPI and `rdev` uses the
-Win32 low-level keyboard hook, both part of the OS. Once `evdev`/`udev` are
-gated behind `cfg(target_os = "linux")`, the crate should build natively.
+No extra libraries are needed — `rodio` uses WASAPI and key capture uses the
+Win32 low-level keyboard hook, both part of the OS.
 
-Windows generally does **not** require a special permission grant for
-`SetWindowsHookEx`-based key listening, but some anti-cheat and endpoint
-security software will block or flag it — worth documenting in the port.
+```powershell
+cargo build
+cargo test
+.\target\debug\jaster.exe doctor
+```
+
+### Things to know when working on the Windows backend
+
+`src/keyboard/windows.rs` is small, but three of its constraints are not
+obvious and all three cause bugs that look like something else:
+
+- **`CallNextHookEx` must always be called and its result returned.** Returning
+  anything else swallows the keystroke for *every application on the desktop*.
+  Test by typing into Notepad while the daemon runs.
+- **The hook proc has roughly 300 ms** (`LowLevelHooksTimeout`) per call. Exceed
+  it and Windows silently stops calling you — the daemon appears to work and
+  then goes deaf. So the proc only does bookkeeping and a non-blocking
+  `try_send`; audio happens on a consumer thread.
+- **Auto-repeat is not filtered for you.** Unlike evdev's `value == 2`, a held
+  key produces ordinary repeat `WM_KEYDOWN` messages, so the backend tracks
+  which keys are physically down. Without that, holding a key machine-guns.
+
+Two more worth knowing when testing:
+
+- A low-level hook does **not** see keys typed into higher-integrity windows
+  (anything running as administrator, UAC prompts, the secure desktop). Those
+  are silent unless Jaster is elevated too.
+- Anti-cheat and endpoint security software may block the hook entirely.
+  `jaster doctor` probes this by installing and immediately releasing one.
+
+Because `jaster start` detaches the daemon with `DETACHED_PROCESS`, it has no
+console — its output goes to `%LOCALAPPDATA%\Jaster\daemon.log`. Check there
+first when the daemon starts but nothing plays.
+
+### Type-checking Windows from Linux
+
+You do not need a Windows machine to catch most breakage. Type-checking needs
+no MSVC linker:
+
+```bash
+rustup target add x86_64-pc-windows-msvc
+cargo check --target x86_64-pc-windows-msvc
+cargo clippy --target x86_64-pc-windows-msvc --all-targets
+```
+
+Run this before pushing anything that touches `#[cfg]`-gated code. Full builds
+and any actual hook testing still need Windows; CI covers the former.
+
+### Contributing from Windows to the Linux side
+
+If you need to verify Linux behavior, WSL2 works for compiling and linting:
+
+```powershell
+wsl --install -d Ubuntu
+```
+
+Then follow the [Linux](#linux) section inside the WSL2 shell. Two caveats:
+
+- **Clone inside the WSL filesystem** (e.g. `~/Jaster`), not under `/mnt/c/...`.
+  Cargo builds across the filesystem boundary are dramatically slower and can
+  hit file-locking issues.
+- **WSL2 does not pass through host HID devices**, so `jaster event` finds
+  nothing and `jaster start` exits with "No keyboards found". Use WSL2 for
+  compiling and reviewing, not for hardware verification.
 
 ---
 
@@ -332,19 +343,21 @@ src/
 ├── lib.rs                module root
 ├── cli/args.rs           clap CLI definition
 ├── commands/             one file per subcommand
-│   ├── start.rs          spawns the detached daemon (setsid), writes the PID file
-│   ├── daemon.rs         the real work: audio engine + sound cache + one thread per keyboard
-│   ├── stop.rs           reads the PID file, kills the daemon
-│   ├── doctor.rs         environment diagnostics
+│   ├── start.rs          spawns the detached daemon, writes the PID file
+│   ├── daemon.rs         the real work: audio engine + sound cache + the key listener
+│   ├── stop.rs           reads the PID file, terminates the daemon
+│   ├── doctor.rs         environment diagnostics, per platform
 │   ├── sounds.rs         lists the installed sound packs
 │   ├── switch.rs         `jaster oreo` — clap external subcommand; restarts the daemon
 │   ├── volume.rs         `jaster volume` — shows/sets the saved level
 │   ├── event.rs          lists detected keyboards
 │   ├── update.rs         self-update via the GitHub release installer
 │   └── version.rs        prints CARGO_PKG_VERSION
-├── keyboard/
-│   ├── discovery.rs      scans /dev/input for devices with A + ENTER + SPACE  [Linux-only]
-│   └── hook.rs           rdev-based listener wrapper                    [cross-platform, currently unused]
+├── keyboard/             the only place a key-capture backend lives
+│   ├── key.rs            `Key` — a PS/2 set-1 scancode, the type the rest of the code uses
+│   ├── mod.rs            picks the backend by target; both must export sources() + listen()
+│   ├── linux.rs          scans /dev/input for A + ENTER + SPACE, one thread per device
+│   └── windows.rs        WH_KEYBOARD_LL hook, its message pump, and the auto-repeat filter
 ├── audio/
 │   ├── engine.rs         rodio output stream
 │   ├── theme.rs          discovers sound packs and parses their config.json
@@ -352,11 +365,23 @@ src/
 │   ├── volume.rs         the saved level, plus the daemon's live view of it
 │   └── player.rs         plays a buffered sound into the mixer
 ├── utils/select.rs       raw-mode arrow-key picker used by `jaster start`
-└── utils/pid.rs          PID file helpers (not currently wired into `utils/mod.rs`)
+├── utils/paths.rs        where the data dir and sound packs live, per platform
+└── utils/pid.rs          PID file helpers, including the "is it still Jaster?" check
 ```
 
-Empty stub files exist at `src/commands/init.rs`, `src/keyboard/events.rs`, and
-`src/keyboard/mapper.rs` — they are placeholders, not modules in use.
+### Where the platform differences are
+
+Only two areas branch on the OS, and keeping it that way is the point:
+
+- **`src/keyboard/`** — the backend is selected in `mod.rs` with
+  `#[cfg_attr(..., path = ...)]`, so `linux.rs` and `windows.rs` are never
+  compiled together and must both satisfy the same two-function interface.
+- **`#[cfg(unix)]` / `#[cfg(windows)]` arms** in `utils/paths.rs`,
+  `utils/pid.rs`, `utils/select.rs`, `commands/start.rs`, `commands/stop.rs`,
+  `commands/doctor.rs`, and `commands/update.rs` — each is a small pair of
+  functions with the same signature, sitting next to each other.
+
+`src/audio/` contains no platform code at all, which is why `Key` exists.
 
 ### Sound packs
 
@@ -435,51 +460,45 @@ route to the command, never to the switch).
 
 ---
 
-## Porting roadmap: what cross-platform work actually needs
+## Porting roadmap: adding macOS
 
-If you want to make Jaster build and run on your own OS, this is the work. Each
-item is independently reviewable, so feel free to take just one.
+Linux and Windows are done. macOS is the remaining target, and the structure
+the Windows port established makes it a much smaller job than it was.
 
-**1. Gate the Linux-only dependencies.** In `Cargo.toml`, move `evdev` and `udev`
-under a target-specific table so non-Linux builds stop failing:
+**What is already in place**
 
-```toml
-[target.'cfg(target_os = "linux")'.dependencies]
-evdev = "0.13"
-udev = "0.9.3"
-libc = "0.2.189"
-```
+- A platform-neutral key type, `src/keyboard/key.rs`. `Key` is a PS/2 set-1
+  scancode, which is the space sound packs are written in, so `src/audio/`
+  never sees an OS-specific type.
+- A two-function backend interface — `sources()` and `listen()` — selected in
+  `src/keyboard/mod.rs`. Both the threaded evdev backend and the single-pump
+  Win32 backend satisfy it, so it is unlikely to fight a third.
+- `#[cfg(unix)]` arms already cover macOS for paths, `setsid` detaching,
+  `libc::kill`, and the termios picker, since those are Unix rather than Linux
+  concerns.
 
-**2. Drop the unused `udev` dependency.** Nothing in `src/` imports it. Removing
-it eliminates one Linux-only, pkg-config-dependent crate outright.
+**What a macOS port needs**
 
-**3. Introduce a platform-neutral key type.** `evdev::KeyCode` currently leaks
-into shared code — `src/audio/cache.rs` keys its `HashMap` on it, even though
-sound caching is not inherently Linux-specific. Define a Jaster-owned `Key` enum
-and convert at the platform boundary (`evdev::KeyCode → Key` on Linux,
-`rdev::Key → Key` elsewhere).
+1. **A `src/keyboard/macos.rs` backend**, wired into the `#[cfg_attr]` in
+   `src/keyboard/mod.rs`, and the `compile_error!` there relaxed. A
+   `CGEventTap` is the usual approach; it needs a `CFRunLoop`, which is
+   structurally the same shape as the Windows message pump.
+2. **A keycode conversion.** macOS virtual keycodes are their own numbering, so
+   this is a table to `Key`, in the same spirit as `from_evdev` in
+   `src/keyboard/linux.rs`. Keep it in the backend file.
+3. **Input Monitoring permission.** Unlike Windows, macOS requires the user to
+   grant it under *System Settings → Privacy & Security → Input Monitoring*, and
+   without it the tap silently receives nothing. `check_keyboard()` in
+   `src/commands/doctor.rs` should detect and explain this — it already returns
+   `(bool, Vec<String>)` for exactly this kind of remediation text.
+4. **`sound_root()` and `data_dir()`** in `src/utils/paths.rs` — decide whether
+   macOS follows the Unix layout (it does today, by falling through
+   `#[cfg(unix)]`) or moves to `~/Library/Application Support`.
+5. **A release job and installer**, mirroring `build-windows` in
+   `.github/workflows/release.yml` and `scripts/install.ps1`. Add `macos-latest`
+   to the matrix in `.github/workflows/ci.yml` at the same time.
 
-**4. Add a backend abstraction for key capture.** Something like a
-`KeyListener` trait with an evdev implementation on Linux and an `rdev`
-implementation on macOS/Windows. `src/keyboard/hook.rs` is already the rdev
-wrapper — it just needs to be wired into `daemon.rs` behind a `cfg`.
-
-**5. Make paths cross-platform.** Several places assume Unix layout:
-`src/utils/pid.rs` and `src/commands/start.rs`/`stop.rs` read `$HOME` and use
-`~/.local/share/jaster`, and `src/audio/cache.rs` falls back to
-`/usr/share/jaster/sounds`. Windows has neither. A crate like `directories`, or
-a small `cfg`-gated helper, resolves this.
-
-**6. Replace shelling out with native calls.** `stop.rs` runs the `kill` binary
-and `doctor.rs` runs `sh -c` — neither exists on Windows.
-
-**7. Extend `doctor` per platform.** It currently early-returns on any non-Linux
-OS. Each platform needs its own checks: Input Monitoring permission on macOS,
-audio device availability on Windows, in place of the Linux `input`-group check.
-
-**8. Extend the release CI.** `.github/workflows` builds only
-`jaster-linux-x86_64.tar.gz`. macOS and Windows need their own build jobs and
-their own install/uninstall paths.
+Each of these is independently reviewable, so feel free to take just one.
 
 ---
 
@@ -529,15 +548,16 @@ version. Replacing the literal with `env!("CARGO_PKG_VERSION")` fixes it.
 
 | Symptom | Cause | Fix |
 |---------|-------|-----|
-| `cargo build` fails compiling `evdev` or `udev` on macOS/Windows | Linux-only deps are unconditional | Expected today — use WSL2 / a VM, or take on the port |
-| `error: failed to run custom build command for libudev-sys` | Missing libudev headers | Install `libudev-dev` / `systemd-devel` |
+| `Jaster supports Linux and Windows` compile error | Building on macOS, which has no backend yet | See [Porting roadmap](#porting-roadmap-adding-macos) |
 | `ALSA lib ... cannot find card` or link error on `-lasound` | Missing ALSA headers | Install `libasound2-dev` / `alsa-lib-devel` |
-| Link error mentioning `X11`, `Xtst`, or `Xi` | Missing X11 dev packages | Install `libx11-dev libxtst-dev libxi-dev libxrandr-dev` |
 | `jaster doctor` reports "Permission denied" | User is not in the `input` group | `sudo usermod -aG input $USER`, then start a new session |
 | No keyboards detected, permissions look correct | Session not refreshed since the group change | `exec su - "$USER"`, or log out and back in |
 | No keyboards detected inside WSL2 | WSL2 does not expose host HID devices | Expected — verify on real Linux hardware or a VM |
 | Daemon runs but no sound | Wrong working directory, so a dev build loaded installed assets | Run `cargo run` from the repository root |
 | `jaster stop` says "stopped" but sound continues | Stale PID file | `pkill -f 'jaster daemon'` and remove `~/.local/share/jaster/jaster.pid` |
+| Windows: `jaster start` succeeds but nothing plays | Daemon failed after detaching | Read `%LOCALAPPDATA%\Jaster\daemon.log` |
+| Windows: typing is silent only in some apps | The app runs elevated, or anti-cheat blocks the hook | Run `jaster doctor`; elevate Jaster to match |
+| Windows: a held key machine-guns | Auto-repeat filter regressed in `src/keyboard/windows.rs` | The `HELD` set must be updated on key-up |
 
 ---
 

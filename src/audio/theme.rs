@@ -1,4 +1,3 @@
-use evdev::KeyCode;
 use serde::Deserialize;
 use serde_json::Value;
 use std::{
@@ -6,6 +5,9 @@ use std::{
     fs,
     path::{Path, PathBuf},
 };
+
+use crate::keyboard::Key;
+use crate::utils::paths;
 
 pub const DEFAULT_PACK: &str = "nk-cream";
 
@@ -29,45 +31,11 @@ pub struct SoundPack {
     pub name: String,
     pub dir: PathBuf,
     pub sheet: Option<PathBuf>,
-    pub defines: HashMap<KeyCode, Define>,
+    pub defines: HashMap<Key, Define>,
 }
 
 pub fn sound_root() -> PathBuf {
-    if Path::new("assets/sounds").exists() {
-        PathBuf::from("assets/sounds")
-    } else {
-        PathBuf::from("/usr/share/jaster/sounds")
-    }
-}
-
-/// Sound packs use Windows/PS-2 set 1 scancodes, which are identical to Linux
-/// evdev keycodes for the main block. Extended keys are stored as `0xE00 + low
-/// byte` and need an explicit table.
-fn to_keycode(code: u32) -> Option<KeyCode> {
-    let mapped = match code {
-        1..=127 => code as u16,
-        3612 => 96,  // KP_ENTER
-        3613 => 97,  // RIGHTCTRL
-        3637 => 98,  // KPSLASH
-        3639 => 99,  // SYSRQ
-        3640 => 100, // RIGHTALT
-        3655 => 102, // HOME
-        3656 => 103, // UP
-        3657 => 104, // PAGEUP
-        3659 => 105, // LEFT
-        3661 => 106, // RIGHT
-        3663 => 107, // END
-        3664 => 108, // DOWN
-        3665 => 109, // PAGEDOWN
-        3666 => 110, // INSERT
-        3667 => 111, // DELETE
-        3675 => 125, // LEFTMETA
-        3676 => 126, // RIGHTMETA
-        3677 => 127, // COMPOSE
-        _ => return None,
-    };
-
-    Some(KeyCode::new(mapped))
+    paths::sound_root()
 }
 
 fn to_define(value: &Value) -> Option<Define> {
@@ -107,12 +75,15 @@ impl SoundPack {
                 continue;
             };
 
-            let Some(key) = to_keycode(code) else {
+            let Some(key) = Key::from_pack_code(code) else {
                 continue;
             };
 
             if let Some(define) = to_define(value) {
-                defines.insert(key, define);
+                // Several encodings can name the same physical key. They agree
+                // in every pack we ship, so keep the first and stay
+                // deterministic rather than racing the hasher.
+                defines.entry(key).or_insert(define);
             }
         }
 
@@ -265,15 +236,7 @@ fn ids(packs: &[SoundPack]) -> String {
 }
 
 fn selection_file() -> Option<PathBuf> {
-    let home = std::env::var("HOME").ok()?;
-
-    Some(
-        PathBuf::from(home)
-            .join(".local")
-            .join("share")
-            .join("jaster")
-            .join("sound-pack"),
-    )
+    Some(paths::data_dir()?.join("sound-pack"))
 }
 
 pub fn save_selection(id: &str) {

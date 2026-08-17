@@ -18,17 +18,12 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
 
+      # evdev is pure Rust; ALSA is all rodio needs. The X11 packages were
+      # only ever for rdev, which Jaster no longer depends on.
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y \
-            pkg-config \
-            libasound2-dev \
-            libudev-dev \
-            libx11-dev \
-            libxtst-dev \
-            libxi-dev \
-            libxrandr-dev
+          sudo apt-get install -y pkg-config libasound2-dev
 
       - name: Build
         run: cargo build --release
@@ -49,3 +44,30 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: jaster-linux-x86_64.tar.gz
+
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      # No system dependencies: WASAPI and the keyboard hook are part of the OS.
+      - name: Build
+        run: cargo build --release
+
+      - name: Package Release
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory jaster | Out-Null
+          Copy-Item target\release\jaster.exe jaster\jaster.exe
+          Copy-Item scripts\install.ps1 jaster\install.ps1
+          Copy-Item assets -Destination jaster\assets -Recurse
+
+          Compress-Archive -Path jaster -DestinationPath jaster-windows-x86_64.zip
+
+      - name: Upload Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: jaster-windows-x86_64.zip

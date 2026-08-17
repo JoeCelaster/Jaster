@@ -4,6 +4,11 @@ use jaster::cli::args::{Cli, Commands};
 use jaster::commands;
 
 fn main() {
+    // `colored` never turns this on itself, so without it every banner prints
+    // raw escape codes on the classic console host.
+    #[cfg(windows)]
+    let _ = colored::control::set_virtual_terminal(true);
+
     if let Err(err) = run() {
         eprintln!("✗ {err}");
         std::process::exit(1);

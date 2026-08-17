@@ -1,4 +1,3 @@
-use evdev::KeyCode;
 use rodio::{Decoder, Source, buffer::SamplesBuffer};
 use std::{
     collections::HashMap,
@@ -8,6 +7,7 @@ use std::{
 };
 
 use crate::audio::theme::{Define, SoundPack};
+use crate::keyboard::Key;
 
 /// Every pack is scaled to this RMS so switching packs does not change how loud
 /// typing is. Roughly -34 dBFS: the packs' own peaks are what stop it going any
@@ -18,7 +18,7 @@ const TARGET_RMS: f32 = 0.02;
 const PEAK_CEILING: f32 = 0.95;
 
 pub struct SoundCache {
-    pub sounds: HashMap<KeyCode, SamplesBuffer>,
+    pub sounds: HashMap<Key, SamplesBuffer>,
     pub generic: SamplesBuffer,
 }
 
@@ -143,7 +143,7 @@ fn normalization(clips: &HashMap<ClipId, Pcm>) -> f32 {
 impl SoundCache {
     pub fn load(pack: &SoundPack) -> Result<Self, Box<dyn std::error::Error>> {
         let mut clips: HashMap<ClipId, Pcm> = HashMap::new();
-        let mut assignments: Vec<(KeyCode, ClipId)> = Vec::new();
+        let mut assignments: Vec<(Key, ClipId)> = Vec::new();
         let mut sheet: Option<Pcm> = None;
 
         for (key, define) in &pack.defines {
@@ -204,14 +204,14 @@ impl SoundCache {
             })
             .collect();
 
-        let sounds: HashMap<KeyCode, SamplesBuffer> = assignments
+        let sounds: HashMap<Key, SamplesBuffer> = assignments
             .into_iter()
             .filter_map(|(key, id)| buffers.get(&id).map(|sound| (key, sound.clone())))
             .collect();
 
         let generic = sounds
-            .get(&KeyCode::KEY_A)
-            .or_else(|| sounds.get(&KeyCode::KEY_SPACE))
+            .get(&Key::A)
+            .or_else(|| sounds.get(&Key::SPACE))
             .or_else(|| sounds.values().next())
             .ok_or_else(|| format!("Sound pack '{}' loaded no playable sounds", pack.id))?
             .clone();

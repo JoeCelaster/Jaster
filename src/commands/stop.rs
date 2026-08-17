@@ -1,5 +1,3 @@
-use std::process::{Command, Stdio};
-
 use crate::utils::pid;
 
 pub fn run() -> Result<(), Box<dyn std::error::Error>> {
@@ -17,14 +15,34 @@ pub fn terminate() -> bool {
     let running = pid::running();
 
     if let Some(pid) = running {
-        let _ = Command::new("kill")
-            .arg(pid.to_string())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status();
+        kill(pid);
     }
 
     pid::remove();
 
     running.is_some()
+}
+
+#[cfg(unix)]
+fn kill(pid: u32) {
+    unsafe {
+        libc::kill(pid as libc::pid_t, libc::SIGTERM);
+    }
+}
+
+#[cfg(windows)]
+fn kill(pid: u32) {
+    use windows_sys::Win32::Foundation::CloseHandle;
+    use windows_sys::Win32::System::Threading::{OpenProcess, PROCESS_TERMINATE, TerminateProcess};
+
+    unsafe {
+        let handle = OpenProcess(PROCESS_TERMINATE, 0, pid);
+
+        if handle.is_null() {
+            return;
+        }
+
+        TerminateProcess(handle, 0);
+        CloseHandle(handle);
+    }
 }
