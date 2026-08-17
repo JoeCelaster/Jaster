@@ -6,10 +6,20 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 sudo mkdir -p /usr/local/bin
 sudo mkdir -p /usr/share/jaster
 
-sudo cp "$SCRIPT_DIR/jaster" /usr/local/bin/jaster
-sudo chmod +x /usr/local/bin/jaster
+# Staged, then renamed into place: `jaster update` runs this script from the
+# very binary we are replacing, and writing over a running executable fails
+# with "Text file busy". A rename swaps the file instead of rewriting it.
+sudo cp "$SCRIPT_DIR/jaster" /usr/local/bin/jaster.new
+sudo chmod +x /usr/local/bin/jaster.new
+sudo mv -f /usr/local/bin/jaster.new /usr/local/bin/jaster
 
 sudo cp -r "$SCRIPT_DIR/assets/sounds" /usr/share/jaster/
+
+# `jaster update` sets this. It reports the new version and restarts the daemon
+# itself, so the first-run welcome below would only be noise on top of that.
+if [ -n "${JASTER_UPDATE:-}" ]; then
+  exit 0
+fi
 
 # Colors
 GREEN=$(printf '\033[32m')
