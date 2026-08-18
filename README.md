@@ -83,7 +83,7 @@ Running `jaster start` asks which keyboard you want to sound like:
     CherryMX Red - PBT keycaps         cherrymx-red-pbt
     EG Crystal Purple                  eg-crystal-purple
     EG Oreo                            eg-oreo
-    NK Cream (original by Ryan)        nk-cream
+    NK Cream                           nk-cream
     Topre Purple Hybrid - PBT keycaps  topre-purple-hybrid-pbt
 ```
 
