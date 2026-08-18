@@ -1,6 +1,7 @@
 use crate::{
-    audio::{cache::SoundCache, engine::AudioEngine, player::AudioPlayer, theme, volume::Level},
+    audio::{cache::SoundCache, engine::AudioEngine, theme, volume::Level},
     keyboard,
+    utils::instance,
 };
 
 use std::sync::Arc;
@@ -8,12 +9,17 @@ use std::sync::Arc;
 pub fn run(sound: Option<String>) -> Result<(), Box<dyn std::error::Error>> {
     println!("🎹 Jaster daemon started.");
 
-    // The stream stays on this thread and only its mixer is shared: on Windows
-    // the underlying WASAPI stream is not `Send`, so the engine itself cannot
-    // cross into the listener.
-    let engine = AudioEngine::new()?;
-    let mixer = engine.mixer().clone();
+    // First thing, before the keyboard hook exists: two daemons on one keyboard
+    // play every keystroke twice, at twice the volume, and only one of them is
+    // the one `jaster stop` knows about.
+    let _claim = instance::claim()?;
+
+    // The stream itself lives on the engine's own thread — on Windows the
+    // WASAPI stream is not `Send` — and follows the default output device, so
+    // plugging in headphones moves the sound with it.
+    let (engine, device) = AudioEngine::start()?;
     println!("✓ Audio engine initialized");
+    println!("🔊 Output: {device}");
 
     let pack = theme::resolve(sound.as_deref())?;
 
@@ -42,7 +48,7 @@ pub fn run(sound: Option<String>) -> Result<(), Box<dyn std::error::Error>> {
         if gain > 0.0 {
             let sound = cache.sounds.get(&key).unwrap_or(&cache.generic);
 
-            AudioPlayer::play(&mixer, sound.clone(), gain);
+            engine.play(sound.clone(), gain);
         }
     })
 }

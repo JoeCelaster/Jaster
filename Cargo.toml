@@ -1,6 +1,6 @@
 [package]
 name = "jaster"
-version = "2.1.1"
+version = "2.2.0"
 edition = "2024"
 
 [dependencies]
@@ -18,6 +18,11 @@ evdev = "0.13"
 libc = "0.2.189"
 
 [target.'cfg(windows)'.dependencies]
+# Not called directly — this is how the feature reaches the cpal that rodio
+# pulls in. Without it cpal's WASAPI render thread runs at ordinary priority,
+# and anything busy on the machine delays the click after the keystroke; with
+# it the thread is registered with MMCSS as pro-audio work.
+cpal = { version = "0.16", features = ["audio_thread_priority"] }
 windows-sys = { version = "0.61", features = [
     "Win32_Foundation",
     "Win32_System_Console",          # raw mode for the sound picker

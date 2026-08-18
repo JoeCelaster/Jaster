@@ -39,12 +39,20 @@ fn is_jaster(pid: u32) -> bool {
 fn is_jaster(pid: u32) -> bool {
     use windows_sys::Win32::Foundation::{CloseHandle, WAIT_TIMEOUT};
     use windows_sys::Win32::System::Threading::{
-        OpenProcess, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION,
+        OpenProcess, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SYNCHRONIZE,
         QueryFullProcessImageNameW, WaitForSingleObject,
     };
 
     unsafe {
-        let handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
+        // PROCESS_SYNCHRONIZE is what makes the handle waitable. Without it
+        // WaitForSingleObject does not time out, it fails — so every daemon
+        // read as already dead, `jaster stop` had nothing to kill, and `jaster
+        // start` stacked a second daemon on top of the one still running.
+        let handle = OpenProcess(
+            PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_SYNCHRONIZE,
+            0,
+            pid,
+        );
 
         if handle.is_null() {
             return false;

@@ -132,6 +132,10 @@ fn install() -> Result<(), Box<dyn std::error::Error>> {
     let status = Command::new("powershell")
         .args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", INSTALLER])
         .env("JASTER_UPDATE", "1")
+        // The installer clears any jaster still running, and from where it
+        // stands we are one of them. Without this it would stop the update
+        // halfway through, leaving the rename above and nothing to undo it.
+        .env("JASTER_UPDATE_PID", std::process::id().to_string())
         .status();
 
     let failed = match status {
