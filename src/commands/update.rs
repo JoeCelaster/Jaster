@@ -67,13 +67,17 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+/// The same bootstrap serves Linux and macOS — it picks the release asset from
+/// `uname` — which is why there is no macOS arm anywhere in this file.
 #[cfg(unix)]
 const INSTALLER: &str =
     "curl -fsSL https://raw.githubusercontent.com/JoeCelaster/Jaster/main/install.sh | bash";
 
-/// Where the installer puts the binary. We restart through this path rather
-/// than `current_exe()` because by then `current_exe()` is the *replaced*
-/// inode — the old build we just updated away from.
+/// Where the installer puts the binary, on both Unixes: `/usr/local/bin` is in
+/// `/etc/paths` on every macOS install and outside the set SIP protects. We
+/// restart through this path rather than `current_exe()` because by then
+/// `current_exe()` is the *replaced* inode — the old build we just updated
+/// away from.
 #[cfg(unix)]
 const INSTALLED: &str = "/usr/local/bin/jaster";
 

@@ -4,11 +4,19 @@ use crate::audio::theme;
 use crate::keyboard;
 use crate::utils::pid;
 
+const OS: &str = if cfg!(windows) {
+    "Windows"
+} else if cfg!(target_os = "macos") {
+    "macOS"
+} else {
+    "Linux"
+};
+
 pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     println!("🩺 Jaster Doctor\n");
 
     println!("Operating System");
-    println!("  ✓ {}", if cfg!(windows) { "Windows" } else { "Linux" });
+    println!("  ✓ {OS}");
     println!();
 
     let audio = check_audio();
@@ -150,6 +158,74 @@ fn check_keyboard() -> (bool, Vec<String>) {
     }
 
     (installable, advice)
+}
+
+/// macOS answers this with a permission rather than a device list: the tap is
+/// always there, it just receives nothing until Input Monitoring is granted.
+#[cfg(target_os = "macos")]
+fn check_keyboard() -> (bool, Vec<String>) {
+    use crate::keyboard::Access;
+
+    println!("Keyboard");
+
+    let mut access = keyboard::access();
+
+    // Nothing has asked yet, so there is no switch in System Settings to point
+    // anyone at. Asking is what creates it — and it may put the prompt on
+    // screen, which is the shortest path to a working install.
+    if access == Access::Unknown {
+        keyboard::request();
+        access = keyboard::access();
+    }
+
+    match access {
+        Access::Granted => println!("  ✓ Input Monitoring granted"),
+        Access::Denied => println!("  ✗ Input Monitoring denied"),
+        Access::Unknown => println!("  ? Input Monitoring not decided yet"),
+    }
+
+    let tap = keyboard::tap_can_be_created();
+
+    if tap {
+        println!("  ✓ System-wide keyboard event tap available");
+    } else {
+        println!("  ✗ Could not create the keyboard event tap");
+    }
+
+    let ready = access == Access::Granted && tap;
+
+    let mut advice = vec![
+        "ℹ macOS gives Input Monitoring to whatever *launched* Jaster, not to".to_string(),
+        "  Jaster. Started from a terminal, the switch to turn on carries your".to_string(),
+        "  terminal's name — Terminal, iTerm2, Ghostty, VS Code — and there may".to_string(),
+        "  be no \"jaster\" entry in the list at all.".to_string(),
+        String::new(),
+        "ℹ Typing is silent inside password fields and in any app using Secure".to_string(),
+        "  Keyboard Entry (Terminal has it in its own menu). macOS shuts every".to_string(),
+        "  event tap out of those, by design.".to_string(),
+        String::new(),
+        "ℹ The grant is tied to the exact binary, so expect to allow it once".to_string(),
+        "  more after `jaster update` replaces it.".to_string(),
+    ];
+
+    if !ready {
+        advice.splice(
+            0..0,
+            [
+                "❌ Jaster cannot capture keys yet.".to_string(),
+                String::new(),
+                "Open System Settings → Privacy & Security → Input Monitoring and".to_string(),
+                "turn on the entry for your terminal. Then quit the terminal".to_string(),
+                "completely — ⌘Q, a new window is not enough, since the grant".to_string(),
+                "only reaches processes started after it — reopen it and run:".to_string(),
+                String::new(),
+                "    jaster doctor".to_string(),
+                String::new(),
+            ],
+        );
+    }
+
+    (ready, advice)
 }
 
 fn ready() {
