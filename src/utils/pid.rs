@@ -26,10 +26,33 @@ pub fn running() -> Option<u32> {
     is_jaster(pid).then_some(pid)
 }
 
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 fn is_jaster(pid: u32) -> bool {
     fs::read_to_string(format!("/proc/{pid}/comm"))
         .is_ok_and(|command| command.trim().contains("jaster"))
+}
+
+/// macOS is Unix but has no `/proc`, so the Linux arm above would compile here
+/// and quietly answer "no" for every pid — `jaster stop` would report success
+/// while the daemon played on, and the next `start` would stack a second one.
+/// Ask the kernel for the executable path instead; it is the same recycled-pid
+/// guard `comm` gives us on Linux.
+#[cfg(target_os = "macos")]
+fn is_jaster(pid: u32) -> bool {
+    let mut buffer = [0u8; libc::PROC_PIDPATHINFO_MAXSIZE as usize];
+
+    let written = unsafe {
+        libc::proc_pidpath(
+            pid as libc::pid_t,
+            buffer.as_mut_ptr().cast(),
+            buffer.len() as u32,
+        )
+    };
+
+    written > 0
+        && String::from_utf8_lossy(&buffer[..written as usize])
+            .to_ascii_lowercase()
+            .contains("jaster")
 }
 
 /// Windows has no `/proc`, so ask the kernel directly: the process must still

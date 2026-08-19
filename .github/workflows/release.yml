@@ -71,3 +71,57 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: jaster-windows-x86_64.zip
+
+  build-macos:
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          # The runners are Apple Silicon, so the Intel half is the cross
+          # build. Both targets ship with the same SDK.
+          targets: aarch64-apple-darwin, x86_64-apple-darwin
+
+      # No system dependencies: CoreAudio, CoreGraphics and IOKit are part of
+      # the OS.
+      - name: Build both architectures
+        run: |
+          cargo build --release --target aarch64-apple-darwin
+          cargo build --release --target x86_64-apple-darwin
+
+      # One universal binary rather than two assets, so install.sh has nothing
+      # to decide from `uname -m`.
+      - name: Make one universal binary
+        run: |
+          lipo -create -output jaster-universal \
+            target/aarch64-apple-darwin/release/jaster \
+            target/x86_64-apple-darwin/release/jaster
+          lipo -info jaster-universal
+
+      # Apple Silicon refuses to execute an unsigned binary at all. The linker
+      # ad-hoc signs each slice, but lipo is exactly the surgery that can
+      # invalidate that, so re-sign the finished file. `--sign -` is ad-hoc: no
+      # certificate, no Apple account, and no notarization — none of which this
+      # download path needs, because curl never sets the quarantine attribute
+      # Gatekeeper keys on.
+      - name: Ad-hoc sign
+        run: |
+          codesign --force --sign - jaster-universal
+          codesign --verify --verbose jaster-universal
+
+      - name: Package Release
+        run: |
+          mkdir jaster
+          cp jaster-universal jaster/jaster
+          cp scripts/install.sh jaster/install.sh
+          cp -r assets jaster/
+          chmod +x jaster/jaster jaster/install.sh
+
+          tar -czf jaster-macos-universal.tar.gz jaster
+
+      - name: Upload Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: jaster-macos-universal.tar.gz

@@ -23,9 +23,18 @@ pub fn data_dir() -> Option<PathBuf> {
 }
 
 /// Where the installer puts sound packs.
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "macos")))]
 fn installed_sounds() -> PathBuf {
     PathBuf::from("/usr/share/jaster/sounds")
+}
+
+/// `/usr/share` is on macOS's sealed system volume, where SIP refuses writes
+/// even to root — the installer cannot put anything there, so looking for the
+/// packs there would find nothing. `/usr/local` is the prefix Apple leaves
+/// alone, and `/usr/local/bin/jaster` already lives under it.
+#[cfg(target_os = "macos")]
+fn installed_sounds() -> PathBuf {
+    PathBuf::from("/usr/local/share/jaster/sounds")
 }
 
 #[cfg(windows)]

@@ -7,28 +7,31 @@ This guide gets you from a fresh clone to a running development build of Jaster 
 
 ## Read this first: the current platform reality
 
-**Linux and Windows are both first-class targets.** Each builds and runs
-natively, and CI checks both on every push.
+**Linux, macOS and Windows are all first-class targets.** Each builds and runs
+natively, and CI checks all three on every push.
 
 Platform-specific code lives in exactly two places, and the rest of the
 codebase is free of `#[cfg]`:
 
-| Concern | Linux | Windows |
-|---------|-------|---------|
-| Key capture | `src/keyboard/linux.rs` — `evdev`, one thread per `/dev/input` device | `src/keyboard/windows.rs` — a `WH_KEYBOARD_LL` hook and its message pump |
-| Paths, process control, console | `#[cfg(unix)]` arms in `src/utils/` and `src/commands/` | `#[cfg(windows)]` arms alongside them |
+| Concern | Linux | macOS | Windows |
+|---------|-------|-------|---------|
+| Key capture | `src/keyboard/linux.rs` — `evdev`, one thread per `/dev/input` device | `src/keyboard/macos.rs` — a `CGEventTap` and its run loop | `src/keyboard/windows.rs` — a `WH_KEYBOARD_LL` hook and its message pump |
+| Paths, process control, console | `#[cfg(unix)]` arms in `src/utils/` and `src/commands/`, plus a few `#[cfg(target_os = "linux")]` ones | the same `#[cfg(unix)]` arms, plus `#[cfg(target_os = "macos")]` where `/proc` and `/usr/share` do not exist | `#[cfg(windows)]` arms alongside them |
 
 `src/keyboard/mod.rs` picks the backend with `#[cfg_attr(..., path = ...)]`, so
-both sides must export the same `listen` and `sources`; a symbol missing from
-one is a compile error rather than a silent gap.
+all three must export the same `listen` and `sources`; a symbol missing from one
+is a compile error rather than a silent gap.
 
-Everything else already travels. `rodio` selects ALSA on Linux and WASAPI on
-Windows automatically, and the decode/slice/normalize/limit pipeline in
-`src/audio/` has no OS dependency at all.
+Everything else already travels. `rodio` selects ALSA on Linux, CoreAudio on
+macOS and WASAPI on Windows automatically, and the decode/slice/normalize/limit
+pipeline in `src/audio/` has no OS dependency at all.
 
-**macOS is not supported yet.** `src/keyboard/mod.rs` fails the build with a
-clear message there. See [macOS](#macos) — adding a third backend is now a
-matter of writing one file to that same two-function interface.
+**Watch the `unix` / `linux` distinction.** macOS is Unix, so a `#[cfg(unix)]`
+arm written with only Linux in mind compiles there and is wrong at runtime —
+which is silent. `is_jaster` in `src/utils/pid.rs` is the worked example: the
+`/proc/<pid>/comm` read it used to do under `#[cfg(unix)]` would have answered
+"not Jaster" for every pid on macOS, so `jaster stop` would have reported
+success while the daemon played on.
 
 ---
 
@@ -163,15 +166,111 @@ Linux backend.
 
 ## macOS
 
-**macOS is not supported yet.** The build stops with a `compile_error!` from
-`src/keyboard/mod.rs` saying so, rather than a dependency failure. Choose one of
-the two paths below.
+macOS builds and runs natively. Install Apple's command line tools, which is the
+whole toolchain requirement:
 
-### Path A — contribute to Linux/Windows from macOS
+```bash
+xcode-select --install    # clang and the linker
+```
 
-Use a Linux VM or container to build and run, and edit code natively on macOS.
+There is nothing else to install. CoreAudio, CoreGraphics and IOKit ship with
+the OS, `rodio` targets CoreAudio directly, and `src/keyboard/macos.rs` declares
+the framework calls it needs itself rather than pulling in a wrapper crate — the
+same choice `windows.rs` makes with windows-sys.
 
-**Docker / Podman** (works on Apple Silicon and Intel):
+```bash
+cargo build
+cargo test
+cargo run -- doctor
+```
+
+macOS 10.15 (Catalina) is the floor: the permission calls the backend uses,
+`CGPreflightListenEventAccess` and `IOHIDCheckAccess`, do not exist before it.
+
+### Input Monitoring, and why it is granted to your terminal
+
+A `CGEventTap` receives nothing until the user grants **Input Monitoring** under
+*System Settings → Privacy & Security → Input Monitoring*. Four things about it
+cost time if you learn them by debugging instead of reading:
+
+- **The grant belongs to whatever *launched* Jaster**, not to Jaster. Run from a
+  terminal, the switch to turn on carries your terminal's name — Terminal,
+  iTerm2, Ghostty, VS Code — and there may be no "jaster" entry in the list at
+  all. Each terminal you develop from needs its own.
+- **Only processes started after the grant see it.** Quit the terminal with ⌘Q
+  and reopen it; a new window or tab is not enough.
+- **The grant is tied to the exact binary that asked**, which is why users have
+  to allow Jaster once more after `jaster update` replaces it. Launching from a
+  terminal you have already granted, your own rebuilds are covered by the
+  terminal's grant.
+- **Missing permission is not an error, it is a null port.** Since 10.15,
+  `CGEventTapCreate` returns null rather than a tap that never fires, which is
+  what `listen()` turns into a real error message.
+
+`cargo run -- doctor` reports all of this, and will trigger the system prompt
+itself when nothing has asked yet — there is no entry in System Settings to
+point anyone at until something requests it.
+
+**Secure Keyboard Entry.** Typing is silent inside password fields and in any app
+that turns on Secure Input (Terminal has it in its own menu). macOS shuts every
+event tap out of those by design. If keys stop making a sound in one app only,
+that is this and not a bug.
+
+### Things to know when working on the macOS backend
+
+`src/keyboard/macos.rs` is a run loop with a callback, so it shares most of its
+hazards with the Windows hook rather than with the evdev threads:
+
+- **The system switches the tap off** when a callback is slow
+  (`kCGEventTapDisabledByTimeout`) or when the user's input outruns it
+  (`...ByUserInput`), and reports it nowhere else — the daemon goes deaf while
+  still looking healthy. `handle` re-arms the tap from inside the callback,
+  which is what the `port` `Cell` on `Tap` exists for. This is the macOS twin of
+  the Windows 300 ms `LowLevelHooksTimeout`.
+- **The callback does a table lookup and a `try_send`, nothing else.** No audio,
+  no allocation, no lock the audio side might be holding. The consumer thread in
+  `listen()` does the work.
+- **The tap is listen-only** (`kCGEventTapOptionListenOnly`), so it cannot
+  swallow a keystroke even by mistake — the OS enforces the invariant
+  `windows.rs` has to uphold by hand with `CallNextHookEx`.
+- **It is a session tap, not a HID tap.** `kCGHIDEventTap` wants root; the
+  session level sees every key in the login session without it.
+- **Auto-repeat comes marked**, like evdev's `value == 2`, so there is no
+  held-key table to maintain — unlike Windows.
+- **Modifiers arrive as `kCGEventFlagsChanged`**, which fires on both press and
+  release and says which it was nowhere. The flag bit only means "something in
+  this group is down", so left shift and right shift are indistinguishable by
+  flags alone. `transition()` tracks each key and uses the group bit to
+  resynchronise.
+
+**The half you can test anywhere.** The keycode table and that modifier logic
+live in `src/keyboard/macos_keys.rs`, outside the backend, compiled under
+`#[cfg(any(target_os = "macos", test))]`. They are pure arithmetic, they are the
+part that fails silently — a wrong scancode does not crash, it plays the generic
+click forever — and they are covered by `cargo test` on every runner, Linux and
+Windows included. Anything you can express without a framework call belongs
+there rather than in `macos.rs`.
+
+### Type-checking macOS from Linux or Windows
+
+Most breakage is reachable without a Mac. Type-checking needs no macOS SDK:
+
+```bash
+rustup target add aarch64-apple-darwin x86_64-apple-darwin
+cargo clippy --target aarch64-apple-darwin --all-targets -- -D warnings
+cargo clippy --target x86_64-apple-darwin --all-targets -- -D warnings
+```
+
+Run this before pushing anything that touches `#[cfg]`-gated code; CI does the
+same in the `macos-cross-check` job. Its limit is worth knowing: there is no
+linker step, so it finds bad Rust but not a misspelled framework symbol. Only
+the real `macos-latest` job links the binary, which is why `cargo test` runs
+there.
+
+### Contributing from macOS to the Linux side
+
+If you need to verify Linux behavior, a container gets you compiling and linting
+(Apple Silicon and Intel alike):
 
 ```bash
 docker run --rm -it \
@@ -182,42 +281,11 @@ docker run --rm -it \
            cargo build"
 ```
 
-This gives you a compiling build for verifying code changes, `cargo clippy`, and
-`cargo fmt`. It does **not** give you real keyboard or audio hardware, so
-`jaster start` cannot be end-to-end tested in a container — a full VM (UTM,
-Parallels, VMware Fusion, or OrbStack with a desktop image) with USB passthrough
-is needed for that.
-
-**Practical split:** verify compilation and lints in the container, and ask a
-Linux maintainer to smoke-test hardware behavior on the PR.
-
-### Path B — work on the macOS port itself
-
-This is the contribution that removes the need for Path A. Install the host
-toolchain you will need:
-
-```bash
-xcode-select --install          # Apple's command line tools (clang, linker)
-brew install pkg-config         # if you do not already have it
-```
-
-macOS needs no extra audio packages — `rodio` targets CoreAudio directly. The
-Linux-only dependencies are already gated behind
-`[target.'cfg(target_os = "linux")'.dependencies]`, so nothing blocks the build
-except the missing backend itself: `src/keyboard/mod.rs` raises a
-`compile_error!` until a `macos.rs` exists. See
-[Porting roadmap](#porting-roadmap-adding-macos).
-
-**macOS permissions.** Any global key listener on macOS requires the user to
-grant your terminal (or the built binary) **Input Monitoring** and, for some
-APIs, **Accessibility** access:
-
-`System Settings → Privacy & Security → Input Monitoring` (and `→ Accessibility`)
-
-Without it, an event tap silently receives nothing. The macOS port will need to
-detect this state and surface it in `jaster doctor`, the same way the Linux path
-surfaces the `input` group requirement and the Windows path reports a blocked
-hook.
+It does **not** give you real keyboard or audio hardware, so `jaster start`
+cannot be tested end to end in a container — a full VM (UTM, Parallels, VMware
+Fusion, or OrbStack with a desktop image) with USB passthrough is needed for
+that. In practice: verify compilation and lints in the container, and say on the
+PR that a Linux maintainer should smoke-test the hardware behavior.
 
 ---
 
@@ -355,8 +423,10 @@ src/
 │   └── version.rs        prints CARGO_PKG_VERSION
 ├── keyboard/             the only place a key-capture backend lives
 │   ├── key.rs            `Key` — a PS/2 set-1 scancode, the type the rest of the code uses
-│   ├── mod.rs            picks the backend by target; both must export sources() + listen()
+│   ├── mod.rs            picks the backend by target; all three must export sources() + listen()
 │   ├── linux.rs          scans /dev/input for A + ENTER + SPACE, one thread per device
+│   ├── macos.rs          CGEventTap, its run loop, and the Input Monitoring checks
+│   ├── macos_keys.rs     the testable half of the macOS backend: keycodes + modifier state
 │   └── windows.rs        WH_KEYBOARD_LL hook, its message pump, and the auto-repeat filter
 ├── audio/
 │   ├── engine.rs         rodio output stream
@@ -374,12 +444,18 @@ src/
 Only two areas branch on the OS, and keeping it that way is the point:
 
 - **`src/keyboard/`** — the backend is selected in `mod.rs` with
-  `#[cfg_attr(..., path = ...)]`, so `linux.rs` and `windows.rs` are never
-  compiled together and must both satisfy the same two-function interface.
+  `#[cfg_attr(..., path = ...)]`, so `linux.rs`, `macos.rs` and `windows.rs` are
+  never compiled together and must all satisfy the same two-function interface.
+  `macos_keys.rs` is the exception that proves it: it holds the parts of the
+  macOS backend that need no framework, so they can be compiled and tested on
+  every host.
 - **`#[cfg(unix)]` / `#[cfg(windows)]` arms** in `utils/paths.rs`,
   `utils/pid.rs`, `utils/select.rs`, `commands/start.rs`, `commands/stop.rs`,
-  `commands/doctor.rs`, and `commands/update.rs` — each is a small pair of
-  functions with the same signature, sitting next to each other.
+  `commands/doctor.rs`, and `commands/update.rs` — each is a small set of
+  functions with the same signature, sitting next to each other. Where macOS
+  parts company with Linux inside `unix` it gets its own arm: `installed_sounds`
+  in `paths.rs` (`/usr/local/share`, because SIP seals `/usr/share`) and
+  `is_jaster` in `pid.rs` (`proc_pidpath`, because there is no `/proc`).
 
 `src/audio/` contains no platform code at all, which is why `Key` exists.
 
@@ -460,54 +536,12 @@ route to the command, never to the switch).
 
 ---
 
-## Porting roadmap: adding macOS
-
-Linux and Windows are done. macOS is the remaining target, and the structure
-the Windows port established makes it a much smaller job than it was.
-
-**What is already in place**
-
-- A platform-neutral key type, `src/keyboard/key.rs`. `Key` is a PS/2 set-1
-  scancode, which is the space sound packs are written in, so `src/audio/`
-  never sees an OS-specific type.
-- A two-function backend interface — `sources()` and `listen()` — selected in
-  `src/keyboard/mod.rs`. Both the threaded evdev backend and the single-pump
-  Win32 backend satisfy it, so it is unlikely to fight a third.
-- `#[cfg(unix)]` arms already cover macOS for paths, `setsid` detaching,
-  `libc::kill`, and the termios picker, since those are Unix rather than Linux
-  concerns.
-
-**What a macOS port needs**
-
-1. **A `src/keyboard/macos.rs` backend**, wired into the `#[cfg_attr]` in
-   `src/keyboard/mod.rs`, and the `compile_error!` there relaxed. A
-   `CGEventTap` is the usual approach; it needs a `CFRunLoop`, which is
-   structurally the same shape as the Windows message pump.
-2. **A keycode conversion.** macOS virtual keycodes are their own numbering, so
-   this is a table to `Key`, in the same spirit as `from_evdev` in
-   `src/keyboard/linux.rs`. Keep it in the backend file.
-3. **Input Monitoring permission.** Unlike Windows, macOS requires the user to
-   grant it under *System Settings → Privacy & Security → Input Monitoring*, and
-   without it the tap silently receives nothing. `check_keyboard()` in
-   `src/commands/doctor.rs` should detect and explain this — it already returns
-   `(bool, Vec<String>)` for exactly this kind of remediation text.
-4. **`sound_root()` and `data_dir()`** in `src/utils/paths.rs` — decide whether
-   macOS follows the Unix layout (it does today, by falling through
-   `#[cfg(unix)]`) or moves to `~/Library/Application Support`.
-5. **A release job and installer**, mirroring `build-windows` in
-   `.github/workflows/release.yml` and `scripts/install.ps1`. Add `macos-latest`
-   to the matrix in `.github/workflows/ci.yml` at the same time.
-
-Each of these is independently reviewable, so feel free to take just one.
-
----
-
 ## Contribution workflow
 
 1. Fork the repository and create a branch:
 
    ```bash
-   git checkout -b feat/macos-key-listener
+   git checkout -b feat/short-description
    ```
 
 2. Make your change. Before committing:
@@ -519,6 +553,14 @@ Each of these is independently reviewable, so feel free to take just one.
    cargo test
    ```
 
+   If you touched anything `#[cfg]`-gated, type-check the two targets your
+   machine is not:
+
+   ```bash
+   cargo clippy --target aarch64-apple-darwin --all-targets -- -D warnings
+   cargo clippy --target x86_64-pc-windows-msvc --all-targets -- -D warnings
+   ```
+
 3. Write a clear commit message describing what changed and why.
 
 4. Open a pull request against `main`. In the description, state:
@@ -527,20 +569,18 @@ Each of these is independently reviewable, so feel free to take just one.
      that it compiles (entirely fine — just say so, so a maintainer knows to
      smoke-test it).
 
-Note that CI currently runs only on `v*` tags to publish releases; there is no
-automated check on pull requests yet. Run the commands above locally — a
-reviewer is relying on you having done so.
+CI runs clippy and the test suite on Linux, macOS and Windows for every push and
+pull request, plus a cross-check of both Apple targets from Linux. It cannot
+type for you, though: nothing in CI presses a key, so hardware behavior is still
+something a human has to confirm.
 
 ### Version bumps
 
 The release version lives in `Cargo.toml` and must be committed together with
 the updated `Cargo.lock` — several past commits exist purely to repair a
-mismatch between the two.
-
-Also be aware of an existing inconsistency worth fixing if you touch this area:
-`src/cli/args.rs` hardcodes `#[command(version = "0.1.0")]`, so `jaster --version`
-reports `0.1.0` while `jaster version` correctly reports the `Cargo.toml`
-version. Replacing the literal with `env!("CARGO_PKG_VERSION")` fixes it.
+mismatch between the two. Everything else reads it from there: `jaster version`
+through `env!("CARGO_PKG_VERSION")`, and `jaster --version` through clap's bare
+`#[command(version)]` in `src/cli/args.rs`.
 
 ---
 
@@ -548,7 +588,7 @@ version. Replacing the literal with `env!("CARGO_PKG_VERSION")` fixes it.
 
 | Symptom | Cause | Fix |
 |---------|-------|-----|
-| `Jaster supports Linux and Windows` compile error | Building on macOS, which has no backend yet | See [Porting roadmap](#porting-roadmap-adding-macos) |
+| `Jaster supports Linux, macOS and Windows` compile error | Building on a fourth OS | Expected — there is no backend for it in `src/keyboard/` |
 | `ALSA lib ... cannot find card` or link error on `-lasound` | Missing ALSA headers | Install `libasound2-dev` / `alsa-lib-devel` |
 | `jaster doctor` reports "Permission denied" | User is not in the `input` group | `sudo usermod -aG input $USER`, then start a new session |
 | No keyboards detected, permissions look correct | Session not refreshed since the group change | `exec su - "$USER"`, or log out and back in |
@@ -558,6 +598,12 @@ version. Replacing the literal with `env!("CARGO_PKG_VERSION")` fixes it.
 | Windows: `jaster start` succeeds but nothing plays | Daemon failed after detaching | Read `%LOCALAPPDATA%\Jaster\daemon.log` |
 | Windows: typing is silent only in some apps | The app runs elevated, or anti-cheat blocks the hook | Run `jaster doctor`; elevate Jaster to match |
 | Windows: a held key machine-guns | Auto-repeat filter regressed in `src/keyboard/windows.rs` | The `HELD` set must be updated on key-up |
+| macOS: no sound at all, `doctor` shows the tap unavailable | Input Monitoring not granted to the terminal you launched from | Grant it, then quit the terminal with ⌘Q and reopen it |
+| macOS: granted the permission and still nothing | The grant only reaches processes started after it, and it names your terminal, not Jaster | ⌘Q the terminal — a new window is not enough — and check the entry is the terminal's |
+| macOS: silent in one app only | That app uses Secure Keyboard Entry, which excludes every event tap | Expected; nothing Jaster can do |
+| macOS: sound stops after a burst of typing, daemon still running | The tap was disabled by timeout or user input and not re-armed | `handle` in `src/keyboard/macos.rs` must call `CGEventTapEnable` on both disable events |
+| macOS: one key plays the generic click | Its virtual keycode is missing from the table | Add it to `from_virtual` in `src/keyboard/macos_keys.rs`; the tests there cover the rest |
+| macOS: `jaster stop` says "stopped" but sound continues | `is_jaster` failed to match the running binary | Check the `proc_pidpath` arm in `src/utils/pid.rs`; `pkill jaster` meanwhile |
 
 ---
 

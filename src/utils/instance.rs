@@ -8,6 +8,10 @@
 //! started because the first was invisible — and as `jaster stop` reporting
 //! success while the sound carries on.
 //!
+//! Unix catches that on its own: `is_jaster` in `pid.rs` asks the kernel whether
+//! the pid in the file is still a live Jaster, so a stale file reads as "nothing
+//! running" rather than as a daemon.
+//!
 //! So the Windows daemon also takes a named mutex, which no second daemon can
 //! take, and waits on a named event that `jaster stop` can set from anywhere.
 //! Both are kernel objects: they disappear the instant the daemon does, however
@@ -140,8 +144,9 @@ mod imp {
 
 #[cfg(unix)]
 mod imp {
-    /// Linux finds the daemon through `/proc`, which cannot go stale the way a
-    /// pid file can, so there is nothing extra to hold.
+    /// Unix checks the pid file against the live process — `/proc/<pid>/comm` on
+    /// Linux, `proc_pidpath` on macOS — so a stale entry is caught on read and
+    /// there is nothing extra to hold.
     pub struct Claim(());
 
     pub fn claim() -> Result<Claim, Box<dyn std::error::Error>> {

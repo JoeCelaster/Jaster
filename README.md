@@ -4,16 +4,14 @@
 
 **Bring mechanical typing sounds to your native keyboard.**
 
-Jaster is a lightweight CLI application that adds realistic mechanical typing sounds to any keyboard on Linux and Windows, providing an immersive typing experience with minimal setup.
+Jaster is a lightweight CLI application that adds realistic mechanical typing sounds to any keyboard on Linux, macOS and Windows, providing an immersive typing experience with minimal setup.
 
 ---
 
 > [!NOTE]
 > **Current Platform Support**
 >
-> Jaster supports **Linux** and **Windows**.
->
-> Support for **macOS** is under active development as part of Jaster's cross-platform roadmap.
+> Jaster supports **Linux**, **macOS** and **Windows**.
 
 ## Installation
 
@@ -34,6 +32,29 @@ exec su - "$USER"
 # Start Jaster and enable typing sounds
 jaster start
 ```
+
+### macOS
+
+Copy and paste the following into your terminal:
+
+```bash
+# Download and install Jaster
+curl -fsSL https://raw.githubusercontent.com/JoeCelaster/Jaster/main/install.sh | bash
+
+# Start Jaster and enable typing sounds
+jaster start
+```
+
+macOS will not let anything read the keyboard until you say so. Open
+**System Settings → Privacy & Security → Input Monitoring** and turn on the
+entry for the terminal you ran Jaster from, then **quit that terminal
+completely** (⌘Q — a new window is not enough) and reopen it.
+
+The permission belongs to the app that *launched* Jaster, not to Jaster, so the
+switch is named after your terminal — Terminal, iTerm2, Ghostty, VS Code — and
+there may be no "jaster" entry in the list at all.
+
+One universal binary covers both Apple Silicon and Intel.
 
 ### Windows
 
@@ -177,6 +198,13 @@ Jaster listens for keyboard input events and plays synchronized typing sounds in
 - Audio system supported by your distribution (ALSA/PipeWire/PulseAudio)
 - Permission to access `/dev/input` devices
 
+**macOS**
+
+- macOS 10.15 (Catalina) or later
+- Apple Silicon or Intel — the installer ships one universal binary
+- Input Monitoring granted to the terminal you start Jaster from
+- Nothing else. Audio and key capture both use built-in system frameworks.
+
 **Windows**
 
 - Windows 10 or later
@@ -209,6 +237,20 @@ sudo usermod -aG input $USER
 exec su - "$USER"
 ```
 
+**On macOS**, four things are worth knowing:
+
+- The Input Monitoring switch carries your *terminal's* name, not Jaster's.
+  Grant it to every terminal you start Jaster from.
+- Granting it only affects processes started afterwards, so quit the terminal
+  with ⌘Q and reopen it. Opening a new window is not enough.
+- Typing is silent in password fields and in any app using Secure Keyboard
+  Entry (Terminal has it in its own menu). macOS shuts every event tap out of
+  those deliberately, and there is nothing Jaster can do about it.
+- The grant is tied to the exact binary, so `jaster update` needs you to allow
+  it once more.
+
+`jaster doctor` reports which of these is in the way.
+
 **On Windows**, two things are worth knowing:
 
 - Anti-cheat software (Vanguard, EasyAntiCheat, BattlEye) and some endpoint
@@ -229,6 +271,15 @@ which is the place to look if `jaster start` succeeds but nothing plays.
 ```bash
 sudo rm /usr/local/bin/jaster
 sudo rm -rf /usr/share/jaster
+rm -rf ~/.local/share/jaster
+```
+
+**macOS** — remove the installed binary and its sounds, then revoke the
+permission under *System Settings → Privacy & Security → Input Monitoring*:
+
+```bash
+sudo rm /usr/local/bin/jaster
+sudo rm -rf /usr/local/share/jaster
 rm -rf ~/.local/share/jaster
 ```
 

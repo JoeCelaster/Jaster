@@ -9,7 +9,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: [ubuntu-latest, windows-latest, macos-latest]
 
     runs-on: ${{ matrix.os }}
 
@@ -28,5 +28,27 @@ jobs:
       - run: cargo clippy --all-targets -- -D warnings
 
       # The pack tests decode and measure audio but never open a device, so
-      # they run fine on a headless runner.
+      # they run fine on a headless runner. On macOS this run is also the only
+      # thing that links the binary, and so the only check that every
+      # `extern "C"` name in keyboard/macos.rs is a symbol that really exists —
+      # clippy stops before the linker.
       - run: cargo test
+
+  # Catches a broken cfg on macOS from the Linux and Windows machines most of
+  # Jaster is written on. No macOS SDK here, so this stops at type checking: it
+  # finds bad Rust, not a bad framework symbol.
+  macos-cross-check:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin, x86_64-apple-darwin
+          components: clippy
+
+      # No ALSA step: cpal takes the CoreAudio path for Apple targets, so
+      # alsa-sys is not in that dependency graph at all.
+      - run: cargo clippy --target aarch64-apple-darwin --all-targets -- -D warnings
+      - run: cargo clippy --target x86_64-apple-darwin --all-targets -- -D warnings
